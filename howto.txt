@@ -1,0 +1,51 @@
+
+### How to implement a simple scheme?
+
+Potentially need an AST-like data structure representing the parsed expression.
+This is the s-expression. Well represented as a pair with value types:
+
+    null
+    pair
+    boolean (true/false)
+    number
+    identifier/symbol
+
+One way to accomplish the above would be to use a pair datatype in the host
+language. Another is to try to use tuples or lists; this will result in faster
+execution but is much harder?
+
+'value' and other high level functions will take an s-expr and return an
+s-expr. eval wraps this with an AST parse at the begining and a pretty print at
+the end.
+
+'meaning' takes an s-expr object and a context/environment and computes the
+result s-expr. it recursively looks at each node in the s-expr, decides what
+action needs to be taken on it, and executes the action. possible actions (aka,
+parsed types) are:
+
+    const (atomic values)
+    lambda
+    quote (s-expr "one level down")
+    identifier (a symbol to be looked up in the context)
+    cond (conditional expression)
+
+The specific list of "special"/"built-in"/"reserved" identifiers is:
+
+    lambda
+    quote
+    cond
+    else
+    cons
+    car
+    cdr
+    null?
+    eq?
+    atom?
+    zero?
+    number?
+
+Things which an be applied are lambdas and the above built-ins.
+
+When applying a lambda, need to bind values to local context. This requires
+an immutable or copied lookup table.
+
