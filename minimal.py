@@ -151,8 +151,8 @@ def value(x):
 def test():
     # ((lambda (x) (+ 1 x)) 5) ; 6
     v = value( (('lambda', ('x',), ('+', 1, 'x')), 5) )
-    print(v)
     assert(v is 6)
+    return True
 
 if __name__=='__main__':
-    test()
+    print(test())
