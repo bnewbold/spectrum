@@ -1,5 +1,5 @@
 
-### How to implement a simple scheme?
+### How to implement a minimal scheme?
 
 Potentially need an AST-like data structure representing the parsed expression.
 This is the s-expression. Well represented as a pair with value types:
