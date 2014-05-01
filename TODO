@@ -1,0 +1,12 @@
+- pseudo unittest; makefile?
+- find r7rs-small; try a full/compliant implementation in scheme/python?
+  eg, macros
+- define a larger sub-set with let, letrc, etc
+    - include a parser
+    - should be able to run minimal.scm
+- of interest:
+    julia
+    c
+    javascript
+    haskell
+    go
