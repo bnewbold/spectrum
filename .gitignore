@@ -15,6 +15,7 @@ build/
 _build/
 src/build/
 *.log
+minimal-rs
 
 # Don't ignore this file itself
 !.gitignore
