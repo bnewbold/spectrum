@@ -32,8 +32,25 @@ fn is_zero(n: f64) -> bool {
 
 ///////////////////////////////////
 
-fn scheme_tokenize(s: &String) -> Result<Vec<&String>, &'static str> {
-    let ret = vec![s];
+//let sep = ('(', ')');
+//let ws = (' ', '\t', '\n');
+// TODO: this doesn't handle strings properly. Eg:
+//   (quote "this ) will ( fail")
+fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
+    let mut ret = Vec::<&str>::new();
+    for s in raw_str.split_whitespace() {
+        if s.len() > 1 && s.starts_with('(') {
+            let (paren, el) = s.split_at(1);
+            ret.push("(");
+            ret.push(el);
+        } else if s.len() > 1 && s.ends_with(')') {
+            let (el, paren) = s.split_at(s.len() - 1);
+            ret.push(el);
+            ret.push(")");
+        } else if s.len() > 0 {
+            ret.push(s);
+        }
+    }
     return Ok(ret);
 }
 
@@ -42,7 +59,7 @@ fn scheme_parse_num(s: &String) -> Result<f64, &'static str> {
     return Ok(num);
 }
 
-fn scheme_parse_sexpr<'a>(sexpr: &Vec<&'a String>) -> Result<SchemeExpr<'a>, &'static str> {
+fn scheme_parse_sexpr<'a>(sexpr: &Vec<&'a str>) -> Result<SchemeExpr<'a>, &'static str> {
     let ret = sexpr.into_iter().map(|el| SchemeExpr::SchemeStr(el)).collect();
     return Ok(SchemeExpr::SchemeList(ret))
 }
@@ -87,6 +104,7 @@ fn main() {
             return;
         }
         let tokens = scheme_tokenize(&raw_input).unwrap();
+        println!("Tokens: {}", tokens.join(", "));
         let sexpr = scheme_parse_sexpr(&tokens).unwrap();
         let ast = scheme_parse(&sexpr).unwrap();
         let resp = scheme_eval(&ast).unwrap();
