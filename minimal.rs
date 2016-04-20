@@ -32,23 +32,49 @@ fn is_zero(n: f64) -> bool {
 
 ///////////////////////////////////
 
-//let sep = ('(', ')');
-//let ws = (' ', '\t', '\n');
-// TODO: this doesn't handle strings properly. Eg:
-//   (quote "this ) will ( fail")
+fn is_scheme_whitespace(c: char) -> bool{
+    " \r\n".find(c) != None
+}
+fn is_scheme_sep(c: char) -> bool {
+    "()".find(c) != None
+}
+
+// TODO: need to expand prefix notation stuff like `(1 2 3) to (quote 1 2 3) here?
 fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
     let mut ret = Vec::<&str>::new();
-    for s in raw_str.split_whitespace() {
-        if s.len() > 1 && s.starts_with('(') {
-            let (paren, el) = s.split_at(1);
-            ret.push("(");
-            ret.push(el);
-        } else if s.len() > 1 && s.ends_with(')') {
-            let (el, paren) = s.split_at(s.len() - 1);
-            ret.push(el);
-            ret.push(")");
-        } else if s.len() > 0 {
-            ret.push(s);
+    let mut food: usize = 0;
+    let mut quoted: bool = false;
+    for (i, c) in raw_str.chars().enumerate() {
+        if quoted {
+            if c == '"' && raw_str.chars().collect::<Vec<char>>()[i-1] != '\\' {
+                ret.push(&raw_str[i-food-1..i+1]);
+                quoted = false;
+                food = 0;
+            } else if (raw_str.len() == i+1) {
+                return Err("unmatched quote char");
+            } else {
+                food += 1;
+            }
+        } else if c == '"' {
+            if food > 0 {
+                return Err("unexpected quote char");
+            }
+            if (raw_str.len() == i+1) {
+                return Err("unmatched (trailing) quote char");
+            }
+            quoted = true;
+        } else if is_scheme_whitespace(c) || is_scheme_sep(c) {
+            if food > 0 {
+                ret.push(&raw_str[i-food..i]);
+            }
+            if is_scheme_sep(c) {
+                ret.push(&raw_str[i..i+1]);
+            }
+            food = 0;
+        } else if (raw_str.len() == i+1) {
+            ret.push(&raw_str[i-food..]);
+        } else {
+            food += 1;
         }
     }
     return Ok(ret);
