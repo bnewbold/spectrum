@@ -154,7 +154,11 @@ fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(SchemeExpr<'a>
         return Err("missing a close bracket");
     }
     let rlen = ret.len();
-    return Ok((SchemeExpr::SchemeList(ret), rlen));
+    if depth == 0 && rlen == 1 {
+        return Ok((ret.pop().unwrap(), rlen));
+    } else {
+        return Ok((SchemeExpr::SchemeList(ret), rlen));
+    }
 }
 
 fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
