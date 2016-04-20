@@ -23,6 +23,10 @@ enum SchemeExpr<'a> {
     SchemeBuiltin(&'a str),
     SchemeSymbol(&'a str),
     SchemeStr(&'a str),
+    SchemeProcedure(
+        Vec<SchemeExpr<'a>>,
+        Vec<SchemeExpr<'a>>,
+        HashMap<&'a str, SchemeExpr<'a>>),
     SchemeList(Vec<SchemeExpr<'a>>),
     SchemeQuote(Vec<SchemeExpr<'a>>),
 }
@@ -166,10 +170,22 @@ fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
         &SchemeExpr::SchemeTrue => Ok("#t".to_string()),
         &SchemeExpr::SchemeFalse => Ok("#f".to_string()),
         &SchemeExpr::SchemeNull => Ok("'()".to_string()),
+        &SchemeExpr::SchemeNum(num) => Ok(format!("{}", num).to_string()),
         &SchemeExpr::SchemeBuiltin(b)=> Ok(b.to_string()),
         &SchemeExpr::SchemeStr(s)=> Ok(s.to_string()),
         &SchemeExpr::SchemeSymbol(s)=> Ok(s.to_string()),
-        &SchemeExpr::SchemeNum(num) => Ok(format!("{}", num).to_string()),
+        &SchemeExpr::SchemeProcedure(ref binds, ref body, _) => {
+            let mut ret = "(lambda (".to_string();
+            for bind in binds {
+                ret = ret + &try!(scheme_repr(&bind)) + " ";
+            }
+            ret = ret + ") ";
+            for expr in body {
+                ret = ret + &try!(scheme_repr(&expr));
+            }
+            ret = ret + ")";
+            Ok(ret)
+        },
         &SchemeExpr::SchemeList(ref list) => {
             let mut ret: String =
                 list.iter().fold("(".to_string(),
@@ -229,9 +245,10 @@ fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&str, SchemeExpr<'a>>) -
         &SchemeExpr::SchemeTrue         => Ok(ast.clone()),
         &SchemeExpr::SchemeFalse        => Ok(ast.clone()),
         &SchemeExpr::SchemeNull         => Ok(ast.clone()),
-        &SchemeExpr::SchemeStr(s)       => Ok(ast.clone()),
-        &SchemeExpr::SchemeNum(num)     => Ok(ast.clone()),
-        &SchemeExpr::SchemeBuiltin(b)   => Ok(ast.clone()),
+        &SchemeExpr::SchemeStr(_)       => Ok(ast.clone()),
+        &SchemeExpr::SchemeNum(_)       => Ok(ast.clone()),
+        &SchemeExpr::SchemeBuiltin(_)   => Ok(ast.clone()),
+        &SchemeExpr::SchemeProcedure(_, _, _) => Ok(ast.clone()),
         &SchemeExpr::SchemeQuote(ref list)
                                         => Ok(SchemeExpr::SchemeList(list.clone())),
         &SchemeExpr::SchemeSymbol(sym)  => match ctx.get(sym) {
