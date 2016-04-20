@@ -256,7 +256,26 @@ fn lambda_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr
 }
 
 fn apply_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
-    Ok(SchemeExpr::SchemeNull)
+    if list.len() == 0 {
+        // TODO: is this correct?
+        return Ok(SchemeExpr::SchemeNull);
+    }
+    let action = &list[0];
+    // XXX: shouldn't be an unwrap here, should be a try!()
+    let args: Vec<SchemeExpr> = list.iter().skip(1).map(|x| scheme_meaning(x, ctx.clone()).unwrap()).collect();
+    // XXX: only things that work with more than one arg
+    match action {
+        &SchemeExpr::SchemeBuiltin("+") => {
+            let mut val: f64 = 0.;
+            for arg in args {
+                val += match arg {
+                    SchemeExpr::SchemeNum(x) => x,
+                    _ => { return Err("+ builtin only takes nums"); },
+                };
+            }
+            Ok(SchemeExpr::SchemeNum(val)) },
+        _ => { return Err("unimplemented builtin"); }
+    }
 }
 
 fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
