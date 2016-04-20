@@ -14,7 +14,7 @@ use std::collections::HashMap;
 const SCHEME_BUILTINS: [&'static str; 16] = ["lambda", "quote", "cond", "else", "cons", "car", "cdr",
     "null?", "eq?", "atom?", "zero?", "number?", "+", "-", "*", "/"];
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum SchemeExpr<'a> {
     SchemeNull,
     SchemeTrue,
@@ -189,7 +189,7 @@ fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
 
 //////////// Expression Evaluation
 
-fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     // XXX: why can't I '.map()' here?
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
@@ -197,27 +197,44 @@ fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -
     }
     Ok(SchemeExpr::SchemeList(body))
 }
-/*
-fn cond_action<'a>(list: &Vec<&'a SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
-    Ok(SchemeExpr::SchemeQuote(list[1..].to_vec()))
+
+fn cond_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+    for line in list.iter().skip(1) {
+        match line {
+            &SchemeExpr::SchemeList(ref inner) => {
+                if inner.len() != 2 {
+                    return Err("cond must contain tuples of (predicate, value) (len !=2)");
+                }
+                let pred = &inner[0];
+                let val = &inner[1];
+                let m = try!(scheme_meaning(&pred, ctx.clone()));
+                if m != SchemeExpr::SchemeFalse && m != SchemeExpr::SchemeNull {
+                    return scheme_meaning(&val, ctx);
+                } },
+            _ => {
+                return Err("cond must contain tuples of (predicate, value)"); },
+        }
+    }
+    // "undefined", return empty tuple
+    Ok(SchemeExpr::SchemeNull)
 }
 
-fn lambda_action<'a>(list: &Vec<&'a SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+fn lambda_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     Ok(SchemeExpr::SchemeQuote(list[1..].to_vec()))
 }
-*/
 
 fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     return match ast {
             // "identity actions"
-        &SchemeExpr::SchemeTrue => Ok(ast.clone()),
-        &SchemeExpr::SchemeFalse => Ok(ast.clone()),
-        &SchemeExpr::SchemeNull => Ok(ast.clone()),
-        &SchemeExpr::SchemeStr(s)=> Ok(ast.clone()),
-        &SchemeExpr::SchemeNum(num) => Ok(ast.clone()),
-        &SchemeExpr::SchemeBuiltin(b)=> Ok(ast.clone()),
-        &SchemeExpr::SchemeQuote(ref list) => Ok(SchemeExpr::SchemeList(list.clone())),
-        &SchemeExpr::SchemeSymbol(sym)=> match ctx.get(sym) {
+        &SchemeExpr::SchemeTrue         => Ok(ast.clone()),
+        &SchemeExpr::SchemeFalse        => Ok(ast.clone()),
+        &SchemeExpr::SchemeNull         => Ok(ast.clone()),
+        &SchemeExpr::SchemeStr(s)       => Ok(ast.clone()),
+        &SchemeExpr::SchemeNum(num)     => Ok(ast.clone()),
+        &SchemeExpr::SchemeBuiltin(b)   => Ok(ast.clone()),
+        &SchemeExpr::SchemeQuote(ref list)
+                                        => Ok(SchemeExpr::SchemeList(list.clone())),
+        &SchemeExpr::SchemeSymbol(sym)  => match ctx.get(sym) {
             // the "lookup action"
             Some(val) => Ok(val.clone()),
             None => Err("symbol not defined"),
@@ -227,12 +244,10 @@ fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&str, SchemeExpr<'a>>) -
                 match list[0] {
                     SchemeExpr::SchemeBuiltin("quote") =>
                         quote_action(list, ctx),
-/*
                     SchemeExpr::SchemeBuiltin("cond") =>
                         cond_action(list, ctx),
                     SchemeExpr::SchemeBuiltin("lambda") =>
                         lambda_action(list, ctx),
-*/
                     _ => Ok(SchemeExpr::SchemeNull)
                 }
             } else {
