@@ -4,17 +4,17 @@
 
 use std::io;
 use std::io::Write;
+use std::collections::HashMap;
 
-// There doesn't seem to be a symbole or quote type in Rust, so i'm going to use strings and
-// vectors
+//////////// Types and Constants
 
-// "list of tokens" implemented as a vector of String.
-// AST implemented as nested tuples (immutable).
+// There doesn't seem to be a symbol or quote type in Rust, so i'm going to use strings and vectors
 
+// XXX: how to avoid the '16' here?
 const SCHEME_BUILTINS: [&'static str; 16] = ["lambda", "quote", "cond", "else", "cons", "car", "cdr",
     "null?", "eq?", "atom?", "zero?", "number?", "+", "-", "*", "/"];
 
-#[allow(dead_code)]
+#[derive(Clone)]
 enum SchemeExpr<'a> {
     SchemeNull,
     SchemeTrue,
@@ -27,19 +27,26 @@ enum SchemeExpr<'a> {
     SchemeQuote(Vec<SchemeExpr<'a>>),
 }
 
-///////////////////////////////////
-
-fn is_zero(n: f64) -> bool {
-    return n == 0.;
-}
-
-///////////////////////////////////
+//////////// Lexing, Parsing, and Printing
 
 fn is_scheme_whitespace(c: char) -> bool{
     " \r\n".find(c) != None
 }
 fn is_scheme_sep(c: char) -> bool {
     "()".find(c) != None
+}
+
+fn is_valid_symbol(s: &str) -> bool {
+    // TODO: this could be an 'any' or 'filter' call?
+    if s.len() == 0 {
+        return false;
+    }
+    for c in s.chars() {
+        if !c.is_alphabetic() && c != '-' {
+            return false;
+        }
+    }
+    return true;
 }
 
 // TODO: need to expand prefix notation stuff like `(1 2 3) to (quote 1 2 3) here?
@@ -109,7 +116,7 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
     }
 
     // If it's all alphas, must be a symbol
-    if token.is_alpha() {
+    if is_valid_symbol(token) {
         return Ok(SchemeExpr::SchemeSymbol(token));
     }
 
@@ -150,10 +157,6 @@ fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(SchemeExpr<'a>
     return Ok((SchemeExpr::SchemeList(ret), rlen));
 }
 
-fn scheme_eval<'a>(ast: &SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
-    return Ok(SchemeExpr::SchemeNull);
-}
-
 fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
     return match ast {
         &SchemeExpr::SchemeTrue => Ok("#t".to_string()),
@@ -179,6 +182,67 @@ fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
         },
     }
 }
+
+//////////// Expression Evaluation
+
+fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+    // XXX: why can't I '.map()' here?
+    let mut body = Vec::<SchemeExpr>::new();
+    for el in list[1..].to_vec() {
+        body.push(el.clone());
+    }
+    Ok(SchemeExpr::SchemeList(body))
+}
+/*
+fn cond_action<'a>(list: &Vec<&'a SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+    Ok(SchemeExpr::SchemeQuote(list[1..].to_vec()))
+}
+
+fn lambda_action<'a>(list: &Vec<&'a SchemeExpr>, ctx: HashMap<&str, SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+    Ok(SchemeExpr::SchemeQuote(list[1..].to_vec()))
+}
+*/
+
+fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+    return match ast {
+            // "identity actions"
+        &SchemeExpr::SchemeTrue => Ok(ast.clone()),
+        &SchemeExpr::SchemeFalse => Ok(ast.clone()),
+        &SchemeExpr::SchemeNull => Ok(ast.clone()),
+        &SchemeExpr::SchemeStr(s)=> Ok(ast.clone()),
+        &SchemeExpr::SchemeNum(num) => Ok(ast.clone()),
+        &SchemeExpr::SchemeBuiltin(b)=> Ok(ast.clone()),
+        &SchemeExpr::SchemeQuote(ref list) => Ok(SchemeExpr::SchemeList(list.clone())),
+        &SchemeExpr::SchemeSymbol(sym)=> match ctx.get(sym) {
+            // the "lookup action"
+            Some(val) => Ok(val.clone()),
+            None => Err("symbol not defined"),
+            },
+        &SchemeExpr::SchemeList(ref list) => {
+            if list.len() >= 2 {
+                match list[0] {
+                    SchemeExpr::SchemeBuiltin("quote") =>
+                        quote_action(list, ctx),
+/*
+                    SchemeExpr::SchemeBuiltin("cond") =>
+                        cond_action(list, ctx),
+                    SchemeExpr::SchemeBuiltin("lambda") =>
+                        lambda_action(list, ctx),
+*/
+                    _ => Ok(SchemeExpr::SchemeNull)
+                }
+            } else {
+                Err("weird short expression")
+            }},
+    }
+}
+
+fn scheme_eval<'a>(ast: &'a SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
+    let mut ctx = HashMap::<&str, SchemeExpr>::new();
+    Ok(try!(scheme_meaning(ast, ctx)))
+}
+
+//////////// Top-Level Program
 
 fn main() {
 
