@@ -11,7 +11,8 @@ use std::io::Write;
 // "list of tokens" implemented as a vector of String.
 // AST implemented as nested tuples (immutable).
 
-//let const SCHEME_BUILTINS = ("lambda", "quote", "cond", "else", "cons", "car", "cdr", "null?", "eq?", "atom?", "zero?", "number?", "+", "-", "*", "/");
+const SCHEME_BUILTINS: [&'static str; 16] = ["lambda", "quote", "cond", "else", "cons", "car", "cdr",
+    "null?", "eq?", "atom?", "zero?", "number?", "+", "-", "*", "/"];
 
 #[allow(dead_code)]
 enum SchemeExpr<'a> {
@@ -81,8 +82,31 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
 }
 
 fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
-    // XXX: implement me
-    return Ok(SchemeExpr::SchemeNull);
+
+    // First match on easy stuff
+    match token {
+        "#t" => return Ok(SchemeExpr::SchemeTrue),
+        "#f" => return Ok(SchemeExpr::SchemeFalse),
+        _ => ()
+    }
+
+    // Is it a builtin?
+    if SCHEME_BUILTINS.contains(&token) {
+        return Ok(SchemeExpr::SchemeBuiltin(token));
+    }
+
+    // Try to parse as a number
+    match token.parse::<f64>() {
+        Ok(x) => return Ok(SchemeExpr::SchemeNum(x)),
+        Err(_) => ()
+    }
+
+    // Is it a string?
+    if token.starts_with("\"") && token.ends_with("\"") {
+        return Ok(SchemeExpr::SchemeStr(token));
+    }
+
+    return Err("unparsable token");
 }
 
 fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(SchemeExpr<'a>, usize), &'static str> {
