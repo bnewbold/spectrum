@@ -126,16 +126,18 @@ fn scheme_eval<'a>(ast: &SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
 fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
     return match ast {
         &SchemeExpr::SchemeTrue => Ok("#t".to_string()),
-        &SchemeExpr::SchemeFalse => Ok("#t".to_string()),
+        &SchemeExpr::SchemeFalse => Ok("#f".to_string()),
         &SchemeExpr::SchemeNull => Ok("'()".to_string()),
+        &SchemeExpr::SchemeBuiltin(b)=> Ok(b.to_string()),
+        &SchemeExpr::SchemeStr(s)=> Ok(s.to_string()),
+        &SchemeExpr::SchemeNum(num) => Ok(format!("{}", num).to_string()),
         &SchemeExpr::SchemeList(ref list) => {
             let mut ret: String =
                 list.iter().fold("(".to_string(),
-                                 |acc, ref el| acc + &scheme_repr(&el).unwrap());
-            ret.push_str(")");
+                                 |acc, ref el| acc + " " + &scheme_repr(&el).unwrap());
+            ret.push_str(" )");
             Ok(ret)
         },
-        _ => Err("don't know how to repr something"),
     }
 }
 
