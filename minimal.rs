@@ -206,7 +206,7 @@ fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
 //////////// Expression Evaluation
 
 fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
-    // XXX: why can't I '.map()' here?
+    // XXX: why can't I '.map()' here? (try .iter().skip(1)...)
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
         body.push(el.clone());
@@ -214,7 +214,7 @@ fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>
     Ok(SchemeExpr::SchemeList(body))
 }
 
-fn cond_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn cond_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     for line in list.iter().skip(1) {
         match line {
             &SchemeExpr::SchemeList(ref inner) => {
@@ -235,11 +235,31 @@ fn cond_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>
     Ok(SchemeExpr::SchemeNull)
 }
 
-fn lambda_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
-    Ok(SchemeExpr::SchemeQuote(list[1..].to_vec()))
+fn lambda_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+    if list.len() < 3 {
+        return Err("lambda must have a bind and at least one body expr");
+    }
+    let mut binds = Vec::<SchemeExpr>::new();
+    let bind_list = match &list[1] {
+        &SchemeExpr::SchemeList(ref bl) => bl,
+        _ => { return Err("second arg to lambda must be a list of binds") },
+    };
+    for bind in bind_list {
+        match bind {
+            &SchemeExpr::SchemeSymbol(_) =>
+                binds.push(bind.clone()),
+            _ => return Err("lambda binds must all be non-builtin symbols")
+        }
+    }
+    let mut body = list.iter().skip(2).map(|x| x.clone()).collect();
+    Ok(SchemeExpr::SchemeProcedure(binds, body, ctx.clone()))
 }
 
-fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn apply_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+    Ok(SchemeExpr::SchemeNull)
+}
+
+fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     return match ast {
             // "identity actions"
         &SchemeExpr::SchemeTrue         => Ok(ast.clone()),
@@ -257,18 +277,20 @@ fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&str, SchemeExpr<'a>>) -
             None => Err("symbol not defined"),
             },
         &SchemeExpr::SchemeList(ref list) => {
-            if list.len() >= 2 {
-                match list[0] {
-                    SchemeExpr::SchemeBuiltin("quote") =>
-                        quote_action(list, ctx),
-                    SchemeExpr::SchemeBuiltin("cond") =>
-                        cond_action(list, ctx),
-                    SchemeExpr::SchemeBuiltin("lambda") =>
-                        lambda_action(list, ctx),
-                    _ => Ok(SchemeExpr::SchemeNull)
-                }
-            } else {
-                Err("weird short expression")
+            match list[0] {
+                SchemeExpr::SchemeBuiltin("quote") =>
+                    quote_action(list, ctx),
+                SchemeExpr::SchemeBuiltin("cond") =>
+                    cond_action(list, ctx),
+                SchemeExpr::SchemeBuiltin("lambda") =>
+                    lambda_action(list, ctx),
+                SchemeExpr::SchemeBuiltin(_) =>
+                    apply_action(list, ctx),
+                SchemeExpr::SchemeProcedure(_, _, _) =>
+                    apply_action(list, ctx),
+                SchemeExpr::SchemeList(_) =>
+                    apply_action(list, ctx),
+                _ => Ok(SchemeExpr::SchemeNull)
             }},
     }
 }
