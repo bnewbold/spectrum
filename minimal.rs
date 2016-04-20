@@ -21,8 +21,10 @@ enum SchemeExpr<'a> {
     SchemeFalse,
     SchemeNum(f64),
     SchemeBuiltin(&'a str),
+    SchemeSymbol(&'a str),
     SchemeStr(&'a str),
     SchemeList(Vec<SchemeExpr<'a>>),
+    SchemeQuote(Vec<SchemeExpr<'a>>),
 }
 
 ///////////////////////////////////
@@ -106,6 +108,11 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
         return Ok(SchemeExpr::SchemeStr(token));
     }
 
+    // If it's all alphas, must be a symbol
+    if token.is_alpha() {
+        return Ok(SchemeExpr::SchemeSymbol(token));
+    }
+
     return Err("unparsable token");
 }
 
@@ -154,10 +161,18 @@ fn scheme_repr<'a>(ast: &SchemeExpr) -> Result<String, &'static str> {
         &SchemeExpr::SchemeNull => Ok("'()".to_string()),
         &SchemeExpr::SchemeBuiltin(b)=> Ok(b.to_string()),
         &SchemeExpr::SchemeStr(s)=> Ok(s.to_string()),
+        &SchemeExpr::SchemeSymbol(s)=> Ok(s.to_string()),
         &SchemeExpr::SchemeNum(num) => Ok(format!("{}", num).to_string()),
         &SchemeExpr::SchemeList(ref list) => {
             let mut ret: String =
                 list.iter().fold("(".to_string(),
+                                 |acc, ref el| acc + " " + &scheme_repr(&el).unwrap());
+            ret.push_str(" )");
+            Ok(ret)
+        },
+        &SchemeExpr::SchemeQuote(ref list) => {
+            let mut ret: String =
+                list.iter().fold("(quote ".to_string(),
                                  |acc, ref el| acc + " " + &scheme_repr(&el).unwrap());
             ret.push_str(" )");
             Ok(ret)
