@@ -80,13 +80,43 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
     return Ok(ret);
 }
 
-fn scheme_parse_num(s: &String) -> Result<f64, &'static str> {
-    let num = 0.;
-    return Ok(num);
+fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
+    // XXX: implement me
+    return Ok(SchemeExpr::SchemeNull);
 }
 
-fn scheme_parse<'a>(tokens: &Vec<&'a str>) -> Result<(SchemeExpr<'a>, usize), &'static str> {
-    return Ok((SchemeExpr::SchemeNull, 0));
+fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(SchemeExpr<'a>, usize), &'static str> {
+    let mut ret = Vec::<SchemeExpr>::new();
+    let mut i: usize = 0;
+    if tokens.len() == 0  {
+        return Ok((SchemeExpr::SchemeNull, 0));
+    } else if tokens.len() == 1 {
+        let expr = try!(scheme_parse_token(tokens[0]));
+        return Ok((expr, 1));
+    }
+    while i < tokens.len() {
+        match tokens[i] {
+            "(" => {
+                let (expr, skip) = try!(scheme_parse(&tokens[i+1..].to_vec(), depth+1));
+                ret.push(expr);
+                i += skip;},
+            ")" => {
+                if depth == 0 {
+                    return Err("missing an open bracket");
+                }
+                return Ok((SchemeExpr::SchemeList(ret), i+1));},
+            token => {
+                let expr = try!(scheme_parse_token(token));
+                ret.push(expr);
+            }
+        }
+        i += 1;
+    }
+    if depth > 0 {
+        return Err("missing a close bracket");
+    }
+    let rlen = ret.len();
+    return Ok((SchemeExpr::SchemeList(ret), rlen));
 }
 
 fn scheme_eval<'a>(ast: &SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
@@ -126,13 +156,15 @@ fn main() {
         }
         let tokens = match scheme_tokenize(&raw_input) {
             Ok(tokens) => {
-                println!("Tokens: {}", tokens.join(", "));
+                println!("Tokens: {}", tokens.join(", ")); // debug
                 tokens},
             Err(e) => {
                 println!("couldn't tokenize: {}", e);
                 continue}};
-        let ast = match scheme_parse(&tokens) {
-            Ok((ast, _)) => ast,
+        let ast = match scheme_parse(&tokens, 0) {
+            Ok((ast, _)) => {
+                println!("AST: {}", scheme_repr(&ast).unwrap());
+                ast},
             Err(e) => {
                 println!("couldn't parse: {}", e);
                 continue}};
