@@ -85,13 +85,8 @@ fn scheme_parse_num(s: &String) -> Result<f64, &'static str> {
     return Ok(num);
 }
 
-fn scheme_parse_sexpr<'a>(sexpr: &Vec<&'a str>) -> Result<SchemeExpr<'a>, &'static str> {
-    let ret = sexpr.into_iter().map(|el| SchemeExpr::SchemeStr(el)).collect();
-    return Ok(SchemeExpr::SchemeList(ret))
-}
-
-fn scheme_parse<'a>(tokens: &SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
-    return Ok(SchemeExpr::SchemeNull);
+fn scheme_parse<'a>(tokens: &Vec<&'a str>) -> Result<(SchemeExpr<'a>, usize), &'static str> {
+    return Ok((SchemeExpr::SchemeNull, 0));
 }
 
 fn scheme_eval<'a>(ast: &SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
@@ -129,11 +124,23 @@ fn main() {
             stdout.write(b"\nCiao!\n").unwrap();
             return;
         }
-        let tokens = scheme_tokenize(&raw_input).unwrap();
-        println!("Tokens: {}", tokens.join(", "));
-        let sexpr = scheme_parse_sexpr(&tokens).unwrap();
-        let ast = scheme_parse(&sexpr).unwrap();
-        let resp = scheme_eval(&ast).unwrap();
+        let tokens = match scheme_tokenize(&raw_input) {
+            Ok(tokens) => {
+                println!("Tokens: {}", tokens.join(", "));
+                tokens},
+            Err(e) => {
+                println!("couldn't tokenize: {}", e);
+                continue}};
+        let ast = match scheme_parse(&tokens) {
+            Ok((ast, _)) => ast,
+            Err(e) => {
+                println!("couldn't parse: {}", e);
+                continue}};
+        let resp = match scheme_eval(&ast) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("couldn't eval: {}", e);
+                continue}};
         println!("{}", scheme_repr(&resp).unwrap());
     }
 }
