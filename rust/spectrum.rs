@@ -27,6 +27,7 @@ enum SchemeExpr<'a> {
     SchemeNum(f64),
     SchemeBuiltin(&'a str),
     SchemeSymbol(&'a str),
+    SchemeIdentifier(&'a str),
     SchemeStr(&'a str),
     SchemeProcedure(
         Vec<&'a str>,
@@ -41,17 +42,21 @@ enum SchemeExpr<'a> {
 fn is_scheme_whitespace(c: char) -> bool{
     " \r\n".find(c) != None
 }
+
 fn is_scheme_sep(c: char) -> bool {
     "()".find(c) != None
 }
 
-fn is_valid_symbol(s: &str) -> bool {
+fn is_valid_identifier(s: &str) -> bool {
     // TODO: this could be an 'any' or 'filter' call?
     if s.len() == 0 {
         return false;
     }
+    if s.starts_with("-") || s.ends_with("-") {
+        return false;
+    }
     for c in s.chars() {
-        if !c.is_alphabetic() && c != '-' {
+        if !(c.is_alphabetic() || c == '-') {
             return false;
         }
     }
@@ -63,6 +68,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
     let mut ret = Vec::<&str>::new();
     let mut food: usize = 0;
     let mut quoted: bool = false;
+    let mut commented: bool = false;
     for (i, c) in raw_str.chars().enumerate() {
         if quoted {
             if c == '"' && raw_str.chars().collect::<Vec<char>>()[i-1] != '\\' {
@@ -74,6 +80,14 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
             } else {
                 food += 1;
             }
+        } else if commented {
+            food = 0;
+            if c == '\n' {
+                commented = false;
+            }
+        } else if c == ';' {
+            commented = true;
+            food = 0;
         } else if c == '"' {
             if food > 0 {
                 return Err("unexpected quote char");
@@ -125,9 +139,14 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
         return Ok(SchemeExpr::SchemeStr(token));
     }
 
-    // If it's all alphas, must be a symbol
-    if is_valid_symbol(token) {
+    // Is it a symbol?
+    if token.starts_with("'") && is_valid_identifier(&token[1..]) {
         return Ok(SchemeExpr::SchemeSymbol(token));
+    }
+
+    // Else, we'll treat it as an identifier
+    if is_valid_identifier(token) {
+        return Ok(SchemeExpr::SchemeIdentifier(token));
     }
 
     return Err("unparsable token");
@@ -180,6 +199,7 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
         &SchemeExpr::SchemeBuiltin(b)=> Ok(b.to_string()),
         &SchemeExpr::SchemeStr(s)=> Ok(s.to_string()),
         &SchemeExpr::SchemeSymbol(s)=> Ok(s.to_string()),
+        &SchemeExpr::SchemeIdentifier(s)=> Ok("'".to_string() + s),
         &SchemeExpr::SchemeProcedure(ref binds, ref body, _) => {
             let mut ret = "(lambda (".to_string();
             for bind in binds {
@@ -253,7 +273,7 @@ fn lambda_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExp
     };
     for bind in bind_list {
         match bind {
-            &SchemeExpr::SchemeSymbol(name) =>
+            &SchemeExpr::SchemeIdentifier(name) =>
                 binds.push(name),
             _ => return Err("lambda binds must all be non-builtin symbols")
         }
@@ -399,12 +419,13 @@ fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>
         &SchemeExpr::SchemeFalse        => Ok(ast.clone()),
         &SchemeExpr::SchemeNull         => Ok(ast.clone()),
         &SchemeExpr::SchemeStr(_)       => Ok(ast.clone()),
+        &SchemeExpr::SchemeSymbol(_)    => Ok(ast.clone()),
         &SchemeExpr::SchemeNum(_)       => Ok(ast.clone()),
         &SchemeExpr::SchemeBuiltin(_)   => Ok(ast.clone()),
         &SchemeExpr::SchemeProcedure(_, _, _) => Ok(ast.clone()),
         &SchemeExpr::SchemeQuote(ref list)
                                         => Ok(SchemeExpr::SchemeList(list.clone())),
-        &SchemeExpr::SchemeSymbol(sym)  => match ctx.get(sym) {
+        &SchemeExpr::SchemeIdentifier(sym)  => match ctx.get(sym) {
             // the "lookup action"
             Some(val) => Ok(val.clone()),
             None => Err("symbol not defined"),
