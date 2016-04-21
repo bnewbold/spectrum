@@ -206,7 +206,7 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
 
 //////////// Expression Evaluation
 
-fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn quote_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     // XXX: why can't I '.map()' here? (try .iter().skip(1)...)
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
@@ -215,7 +215,7 @@ fn quote_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&str, SchemeExpr<'a>
     Ok(SchemeExpr::SchemeList(body))
 }
 
-fn cond_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn cond_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     for line in list.iter().skip(1) {
         match line {
             &SchemeExpr::SchemeList(ref inner) => {
@@ -236,7 +236,7 @@ fn cond_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'
     Ok(SchemeExpr::SchemeNull)
 }
 
-fn lambda_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn lambda_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     if list.len() < 3 {
         return Err("lambda must have a bind and at least one body expr");
     }
@@ -304,7 +304,7 @@ fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeE
     }
 }
 
-fn apply_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     if list.len() == 0 {
         // TODO: is this correct?
         return Ok(SchemeExpr::SchemeNull);
@@ -364,32 +364,32 @@ fn apply_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<
                 _ => Err("unimplemented builtin"),
             }; },
         &SchemeExpr::SchemeList(_) => {
-            let head: SchemeExpr = try!(scheme_meaning(&action, ctx.clone()));
-            match head {
-                SchemeExpr::SchemeProcedure(ref binds, ref body, ref proc_ctx) => {
-                    // This block of code implements procedure (lambda) application
-                    if body.len() != 1 {
-                        return Err("prodedure must have single-expression body");
-                    }
-                    let mut closure = proc_ctx.clone();
-                    if binds.len() != args.len() {
-                        return Err("wrong number of args to procedure");
-                    }
-                    for (name, arg) in binds.iter().zip(args) {
-                        closure.insert(name, arg);
-                    }
-                    let ret = &body[0].clone();
-                    // XXX: Almost Working...
-                    //return scheme_meaning(ret, closure.clone());
-                    return Ok(SchemeExpr::SchemeNull);
-                    },
+            let procedure: SchemeExpr = try!(scheme_meaning(&action, ctx.clone()));
+            match procedure {
+                SchemeExpr::SchemeProcedure(binds, body, proc_ctx) => {
+                    return apply_procedure(&args, &binds, body, proc_ctx.clone()); },
                 _ => { return Err("non-procedure at head of expression"); },
-            } },
+                } },
         _ => { return Err("apply called with something non-applicable"); },
     }
 }
 
-fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn apply_procedure<'a>(args: &Vec<SchemeExpr<'a>>, binds: &Vec<&'a str>, body: Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+    // This block of code implements procedure (lambda) application
+    if body.len() != 1 {
+        return Err("prodedure must have single-expression body");
+    }
+    if binds.len() != args.len() {
+        return Err("wrong number of args to procedure");
+    }
+    let mut closure = ctx.clone();
+    for (name, arg) in binds.iter().zip(args) {
+        closure.insert(name, arg.clone());
+    }
+    return scheme_meaning(&body[0], closure);
+}
+
+fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     return match ast {
             // "identity actions"
         &SchemeExpr::SchemeTrue         => Ok(ast.clone()),
@@ -410,19 +410,20 @@ fn scheme_meaning<'a>(ast: &'a SchemeExpr, ctx: HashMap<&'a str, SchemeExpr<'a>>
             if list.len() == 0 {
                 return Ok(SchemeExpr::SchemeNull);
             }
+            let list = list.clone();
             match list[0] {
                 SchemeExpr::SchemeBuiltin("quote") =>
-                    quote_action(list, ctx),
+                    quote_action(&list, ctx),
                 SchemeExpr::SchemeBuiltin("cond") =>
-                    cond_action(list, ctx),
+                    cond_action(&list, ctx),
                 SchemeExpr::SchemeBuiltin("lambda") =>
-                    lambda_action(list, ctx),
+                    lambda_action(&list, ctx),
                 SchemeExpr::SchemeBuiltin(_) =>
-                    apply_action(list, ctx),
+                    apply_action(&list, ctx),
                 SchemeExpr::SchemeProcedure(_, _, _) =>
-                    apply_action(list, ctx),
+                    apply_action(&list, ctx),
                 SchemeExpr::SchemeList(_) =>
-                    apply_action(list, ctx),
+                    apply_action(&list, ctx),
                 _ => Ok(SchemeExpr::SchemeNull)
             }
         },
