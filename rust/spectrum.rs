@@ -1,6 +1,11 @@
-
-// A partial Scheme implementation in Rust
-// Build with: rustc minimal.rs -o minimal-rust
+/*
+ * A partial Scheme/LISP implementation in Rust. Build and run with:
+ *
+ *  rustc spectrum.rs -o spectrum
+ *  ./spectrum
+ *
+ * Intentended to work with Rust 1.8 (stable from Spring 2016)
+ */
 
 use std::io;
 use std::io::Write;
@@ -441,7 +446,7 @@ fn main() {
 
     loop {
         let raw_input = &mut String::new();
-        stdout.write(b"\nminimal-rust> ").unwrap();
+        stdout.write(b"\nspectrum> ").unwrap();
         stdout.flush().unwrap();
         stdin.read_line(raw_input).unwrap();
         let raw_input = raw_input;  // UGH

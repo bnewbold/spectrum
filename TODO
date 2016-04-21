@@ -1,3 +1,14 @@
+- rust:
+    - my own refactorings and comments
+    - symbols separate from identifiers
+    - define/set! support (at the REPL?)
+    - add file input support (eg, comments in parser, multi-line, tty detect)
+    - multi-part lambdas
+    - begin (?)
+    - map, filter
+    - add numerical comparisons (>, >=)
+    - basic testing
+
 - pseudo unittest; makefile?
 - find r7rs-small; try a full/compliant implementation in scheme/python?
   eg, macros
