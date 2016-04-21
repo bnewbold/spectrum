@@ -64,7 +64,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
                 ret.push(&raw_str[i-food-1..i+1]);
                 quoted = false;
                 food = 0;
-            } else if (raw_str.len() == i+1) {
+            } else if raw_str.len() == i+1 {
                 return Err("unmatched quote char");
             } else {
                 food += 1;
@@ -73,7 +73,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
             if food > 0 {
                 return Err("unexpected quote char");
             }
-            if (raw_str.len() == i+1) {
+            if raw_str.len() == i+1 {
                 return Err("unmatched (trailing) quote char");
             }
             quoted = true;
@@ -85,7 +85,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
                 ret.push(&raw_str[i..i+1]);
             }
             food = 0;
-        } else if (raw_str.len() == i+1) {
+        } else if raw_str.len() == i+1 {
             ret.push(&raw_str[i-food..]);
         } else {
             food += 1;
@@ -206,13 +206,14 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
 
 //////////// Expression Evaluation
 
+#[allow(unused_variables)]
 fn quote_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     // XXX: why can't I '.map()' here? (try .iter().skip(1)...)
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
         body.push(el.clone());
     }
-    Ok(SchemeExpr::SchemeList(body))
+    Ok(SchemeExpr::SchemeQuote(body))
 }
 
 fn cond_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
@@ -252,7 +253,7 @@ fn lambda_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExp
             _ => return Err("lambda binds must all be non-builtin symbols")
         }
     }
-    let mut body = list.iter().skip(2).map(|x| x.clone()).collect();
+    let body = list.iter().skip(2).map(|x| x.clone()).collect();
     Ok(SchemeExpr::SchemeProcedure(binds, body, ctx.clone()))
 }
 
@@ -367,26 +368,23 @@ fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr
             let procedure: SchemeExpr = try!(scheme_meaning(&action, ctx.clone()));
             match procedure {
                 SchemeExpr::SchemeProcedure(binds, body, proc_ctx) => {
-                    return apply_procedure(&args, &binds, body, proc_ctx.clone()); },
+                    // This block of code implements procedure (lambda) application
+                    if body.len() != 1 {
+                        return Err("prodedure must have single-expression body");
+                    }
+                    if binds.len() != args.len() {
+                        return Err("wrong number of args to procedure");
+                    }
+                    let mut closure = proc_ctx.clone();
+                    for (name, arg) in binds.iter().zip(args) {
+                        closure.insert(name, arg.clone());
+                    }
+                    return scheme_meaning(&body[0], closure);
+                },
                 _ => { return Err("non-procedure at head of expression"); },
                 } },
         _ => { return Err("apply called with something non-applicable"); },
     }
-}
-
-fn apply_procedure<'a>(args: &Vec<SchemeExpr<'a>>, binds: &Vec<&'a str>, body: Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
-    // This block of code implements procedure (lambda) application
-    if body.len() != 1 {
-        return Err("prodedure must have single-expression body");
-    }
-    if binds.len() != args.len() {
-        return Err("wrong number of args to procedure");
-    }
-    let mut closure = ctx.clone();
-    for (name, arg) in binds.iter().zip(args) {
-        closure.insert(name, arg.clone());
-    }
-    return scheme_meaning(&body[0], closure);
 }
 
 fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
@@ -410,7 +408,6 @@ fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>
             if list.len() == 0 {
                 return Ok(SchemeExpr::SchemeNull);
             }
-            let list = list.clone();
             match list[0] {
                 SchemeExpr::SchemeBuiltin("quote") =>
                     quote_action(&list, ctx),
