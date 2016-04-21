@@ -368,8 +368,8 @@ fn apply_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<
             match head {
                 SchemeExpr::SchemeProcedure(ref binds, ref body, ref proc_ctx) => {
                     // This block of code implements procedure (lambda) application
-                    if body.len() == 0 {
-                        return Err("prodedure must have non-empty body");
+                    if body.len() != 1 {
+                        return Err("prodedure must have single-expression body");
                     }
                     let mut closure = proc_ctx.clone();
                     if binds.len() != args.len() {
@@ -378,15 +378,9 @@ fn apply_action<'a>(list: &'a Vec<SchemeExpr>, ctx: HashMap<&'a str, SchemeExpr<
                     for (name, arg) in binds.iter().zip(args) {
                         closure.insert(name, arg);
                     }
-                    /* XXX: Almost Working...
-                    let mut ret = Ok(SchemeExpr::SchemeNull);
-                    for expr in body {
-                        //ret = Ok(scheme_meaning(&expr, closure.clone()).unwrap().clone());
-                        let thing = scheme_meaning(&expr, closure.clone()).unwrap();
-                        return Ok(thing);
-                    }
-                    return ret;
-                    */
+                    let ret = &body[0].clone();
+                    // XXX: Almost Working...
+                    //return scheme_meaning(ret, closure.clone());
                     return Ok(SchemeExpr::SchemeNull);
                     },
                 _ => { return Err("non-procedure at head of expression"); },
