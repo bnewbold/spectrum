@@ -13,12 +13,20 @@ use std::collections::HashMap;
 
 //////////// Types and Constants
 
-// There doesn't seem to be a symbol or quote type in Rust, so i'm going to use strings and vectors
+// TODO: how to avoid the '32' here?
+const SCHEME_BUILTINS: [&'static str; 32] = [
+    "lambda", "quote", "cond", "else", "display",
+    "cons", "car", "cdr",
+    "boolean?", "symbol?", "procedure?", "pair?", "number?", "string?",
+    "null?", "atom?", "zero?",
+    "eq?",
+    "=", ">", ">=", "<", "<=",
+    "+", "-", "*", "/",
+    "exp", "log", "sin", "cos", "tan",
+    ];
 
-// XXX: how to avoid the '16' here?
-const SCHEME_BUILTINS: [&'static str; 16] = ["lambda", "quote", "cond", "else", "cons", "car", "cdr",
-    "null?", "eq?", "atom?", "zero?", "number?", "+", "-", "*", "/"];
-
+// The SchemeExpr type is basically the complete AST.
+// There doesn't seem to be a symbol or quote type in Rust, so i'm using typed strings.
 #[derive(Clone, PartialEq)]
 enum SchemeExpr<'a> {
     SchemeNull,
@@ -63,14 +71,18 @@ fn is_valid_identifier(s: &str) -> bool {
     return true;
 }
 
-// TODO: need to expand prefix notation stuff like `(1 2 3) to (quote 1 2 3) here?
+/*
+ * This function takes a raw string and splits it up into a flat sequence of string tokens.
+ * It should handle basic quotes (double quotes only) and comments (';' character to end-of-line).
+ */
 fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
     let mut ret = Vec::<&str>::new();
-    let mut food: usize = 0;
+    let mut food: usize = 0;    // "how many chars of current token have we read?"
     let mut quoted: bool = false;
     let mut commented: bool = false;
     for (i, c) in raw_str.chars().enumerate() {
         if quoted {
+            // Safe to look-back a character here because quoted can't be true for first char
             if c == '"' && raw_str.chars().collect::<Vec<char>>()[i-1] != '\\' {
                 ret.push(&raw_str[i-food-1..i+1]);
                 quoted = false;
@@ -81,19 +93,18 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
                 food += 1;
             }
         } else if commented {
-            food = 0;
             if c == '\n' {
                 commented = false;
             }
         } else if c == ';' {
+            if food > 0 {
+                ret.push(&raw_str[i-food..i]);
+            }
             commented = true;
             food = 0;
         } else if c == '"' {
             if food > 0 {
                 return Err("unexpected quote char");
-            }
-            if raw_str.len() == i+1 {
-                return Err("unmatched (trailing) quote char");
             }
             quoted = true;
         } else if is_scheme_whitespace(c) || is_scheme_sep(c) {
@@ -105,21 +116,27 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
             }
             food = 0;
         } else if raw_str.len() == i+1 {
+            // end of input
             ret.push(&raw_str[i-food..]);
         } else {
             food += 1;
         }
     }
+    if quoted {
+        return Err("unmatched (trailing) quote char");
+    }
     return Ok(ret);
 }
 
+/*
+ * This function takes a token (still a string) and parses it into a single SchemeExpression
+ */
 fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
 
-    // First match on easy stuff
+    // Is it a constant?
     match token {
         "#t" => return Ok(SchemeExpr::SchemeTrue),
         "#f" => return Ok(SchemeExpr::SchemeFalse),
-        ")"  => return Ok(SchemeExpr::SchemeNull),
         _ => ()
     }
 
@@ -152,26 +169,42 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
     return Err("unparsable token");
 }
 
-fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(SchemeExpr<'a>, usize), &'static str> {
-    let mut ret = Vec::<SchemeExpr>::new();
+/*
+ * This function takes a flat sequence of string tokens (as output by scheme_tokenize) and parses
+ * into a SchemeExpression (eg, a nested list of expressions).
+ */
+fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr<'a>>, usize), &'static str> {
     let mut i: usize = 0;
     if tokens.len() == 0  {
-        return Ok((SchemeExpr::SchemeNull, 0));
+        return Ok((vec![SchemeExpr::SchemeNull], 0));
     } else if tokens.len() == 1 {
         let expr = try!(scheme_parse_token(tokens[0]));
-        return Ok((expr, 1));
+        return Ok((vec![expr], 1));
     }
+    let mut parsed: usize = 0;
+    let mut ret = Vec::<SchemeExpr>::new();
     while i < tokens.len() {
+        parsed += 1;
         match tokens[i] {
             "(" => {
-                let (expr, skip) = try!(scheme_parse(&tokens[i+1..].to_vec(), depth+1));
-                ret.push(expr);
-                i += skip;},
+                // "Read ahead" to check for empty tuple
+                if i+1 < tokens.len() && tokens[i+1] == ")" {
+                    ret.push(SchemeExpr::SchemeNull);
+                    i += 1;
+                    parsed += 1;
+                } else {
+                    let (expr_list, skip) = try!(scheme_parse(&tokens[i+1..].to_vec(), depth+1));
+                    i += skip;
+                    parsed += skip;
+                    ret.push(SchemeExpr::SchemeList(expr_list));
+                }
+            },
             ")" => {
                 if depth == 0 {
                     return Err("missing an open bracket");
                 }
-                return Ok((SchemeExpr::SchemeList(ret), i+1));},
+                return Ok((ret, parsed));
+            },
             token => {
                 let expr = try!(scheme_parse_token(token));
                 ret.push(expr);
@@ -182,14 +215,14 @@ fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(SchemeExpr<'a>
     if depth > 0 {
         return Err("missing a close bracket");
     }
-    let rlen = ret.len();
-    if depth == 0 && rlen == 1 {
-        return Ok((ret.pop().unwrap(), rlen));
-    } else {
-        return Ok((SchemeExpr::SchemeList(ret), rlen));
-    }
+    return Ok((ret, parsed));
 }
 
+/*
+ * This function takes an arbitary SchemeExpression and returns a string representation.
+ * It's basically the inverse of scheme_tokenize and scheme_parse; the output representation is
+ * just plain old LISP/Scheme s-expr syntax.
+ */
 fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
     return match ast {
         &SchemeExpr::SchemeTrue => Ok("#t".to_string()),
@@ -330,6 +363,10 @@ fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeE
     }
 }
 
+/*
+ * This function is sort of the heart the program: it takes a non-builtin SchemeProcedure (aka, a
+ * parsed lambda expression) and applies it to arguments.
+ */
 fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     if list.len() == 0 {
         // TODO: is this correct?
@@ -412,6 +449,9 @@ fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr
     }
 }
 
+/*
+ * This is the main entry point for eval: it recursively evaluates an AST and returns the result.
+ */
 fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
     return match ast {
             // "identity actions"
@@ -460,7 +500,7 @@ fn scheme_eval<'a>(ast: &'a SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> 
 
 //////////// Top-Level Program
 
-fn main() {
+fn repl(verbose: bool) {
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -470,31 +510,60 @@ fn main() {
         stdout.write(b"\nspectrum> ").unwrap();
         stdout.flush().unwrap();
         stdin.read_line(raw_input).unwrap();
-        let raw_input = raw_input;  // UGH
+        let raw_input = raw_input; // mutable to immutable reference
         if raw_input.len() == 0 {
+            // end-of-line, aka Ctrl-D. Blank line will still have newline char
             stdout.write(b"\nCiao!\n").unwrap();
             return;
         }
+        // TODO: use debug or something instead of "verbose"?
         let tokens = match scheme_tokenize(&raw_input) {
             Ok(tokens) => {
-                println!("Tokens: {}", tokens.join(", ")); // debug
-                tokens},
+                if verbose { println!("Tokens: {}", tokens.join(", ")); };
+                tokens
+            },
             Err(e) => {
                 println!("couldn't tokenize: {}", e);
-                continue}};
+                continue;
+            }
+        };
         let ast = match scheme_parse(&tokens, 0) {
-            Ok((ast, _)) => {
-                println!("AST: {}", scheme_repr(&ast).unwrap());
-                ast},
+            Ok((mut ast_list, _)) => {
+                if verbose {
+                    for ast in &ast_list {
+                        println!("AST: {}", scheme_repr(ast).unwrap());
+                    };
+                };
+                // We're a REPL, so only one expression at a time
+                if ast_list.len() > 1 {
+                    println!("one expression at a time please!");
+                    continue;
+                } else if ast_list.len() == 0 {
+                    SchemeExpr::SchemeNull
+                } else {
+                    let ast = ast_list.pop().unwrap();
+                    ast
+                }
+            },
             Err(e) => {
                 println!("couldn't parse: {}", e);
-                continue}};
+                continue;
+            }
+        };
         let resp = match scheme_eval(&ast) {
             Ok(x) => x,
             Err(e) => {
                 println!("couldn't eval: {}", e);
-                continue}};
+                continue;
+            }
+        };
         println!("{}", scheme_repr(&resp).unwrap());
     }
+}
+
+fn main() {
+
+    // For now only REPL mode is implemented
+    repl(true);
 }
 
