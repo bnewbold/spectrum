@@ -1,7 +1,6 @@
 - rust:
-    - my own refactorings and comments
-    - symbols separate from identifiers
     - define/set! support (at the REPL?)
+    - refactor out lifetime specifiers
     - add file input support (eg, comments in parser, multi-line, tty detect)
     - multi-part lambdas
     - begin (?)

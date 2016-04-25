@@ -383,7 +383,48 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
         return Ok(SchemeExpr::SchemeNull);
     }
     let action = &list[0];
-    // TODO: make this a single line?
+    let mut procedure = SchemeExpr::SchemeNull;
+
+    /*
+     * First pass:
+     *  - execute special case built-ins (eg, those which take non-symbol identifiers as args)
+     *  - lambdas and identifiers which need to be expanded
+     */
+    match action {
+        &SchemeExpr::SchemeBuiltin(ref builtin) => {
+            match builtin.as_str() {
+                "define" | "set!" => {
+                    if list.len() != 3 {
+                        return Err(format!("define takes two arguments (lambda syntax not supported)"));
+                    }
+                    match &list[1] {
+                        &SchemeExpr::SchemeIdentifier(ref sym) => {
+                            if builtin == "set!" && !env.contains_key(sym) {
+                                return Err(format!("tried to `set!` an undefined identifier: {}", sym));
+                            }
+                            let val = try!(scheme_meaning(&list[2], ctx.clone(), env));
+                            env.insert(sym.clone(), val);
+                            return Ok(SchemeExpr::SchemeNull);
+                        },
+                        _ => { return Err(format!("define requires an identifier")); },
+                    }
+                },
+                _ => (), // fall through to second pass
+            }
+        },
+        &SchemeExpr::SchemeProcedure(_, _, _) => (), // fall through to second pass
+        _ => {
+            // expand, eg, lambdas and non-builtin identifiers in the head position of the apply
+            procedure = try!(scheme_meaning(action, ctx.clone(), env));
+        },
+    }
+
+    let action = if procedure != SchemeExpr::SchemeNull { &procedure } else { action };
+
+    // Second pass:
+    //  -  evaluate all arguments
+    //  - dispatch to builtin handlers or procedure handler
+    // TODO: make this arg meaning .map() a single line?
     let arg_meanings: Result<Vec<_>, _> = list.iter().skip(1).map(|x| scheme_meaning(x, ctx.clone(), env)).collect();
     let args: Vec<SchemeExpr> = try!(arg_meanings);
     match action {
@@ -437,28 +478,25 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                     }
                 },
                 _ => Err(format!("unimplemented builtin: {}", builtin)),
-            }; },
-        &SchemeExpr::SchemeList(_) => {
-            let procedure: SchemeExpr = try!(scheme_meaning(&action, ctx.clone(), env));
-            match procedure {
-                SchemeExpr::SchemeProcedure(binds, body, proc_ctx) => {
-                    // This block of code implements procedure (lambda) application
-                    if body.len() != 1 {
-                        return Err(format!("prodedure must have single-expression body"));
-                    }
-                    if binds.len() != args.len() {
-                        return Err(format!("wrong number of args to procedure"));
-                    }
-                    let mut closure = proc_ctx.clone();
-                    for (name, arg) in binds.iter().zip(args) {
-                        closure.insert(name.clone(), arg.clone());
-                    }
-                    return scheme_meaning(&body[0], closure, env);
-                },
-                _ => { return Err(format!("non-procedure at head of expression: {}",
-                                          scheme_repr(&procedure).unwrap())); },
-                } },
-        _ => { return Err(format!("apply called with something non-applicable")); },
+            };
+        },
+        &SchemeExpr::SchemeProcedure(ref binds, ref body, ref proc_ctx) => {
+            // This block of code implements procedure (lambda) application
+            if body.len() != 1 {
+                return Err(format!("prodedure must have single-expression body"));
+            }
+            if binds.len() != args.len() {
+                return Err(format!("wrong number of args to procedure"));
+            }
+            let mut closure = proc_ctx.clone();
+            for (name, arg) in binds.iter().zip(args) {
+                closure.insert(name.clone(), arg.clone());
+            }
+            return scheme_meaning(&body[0], closure, env);
+        },
+        _ => { return Err(format!("non-procedure at head of expression: {}",
+                                  scheme_repr(&action).unwrap()));
+        },
     }
 }
 
