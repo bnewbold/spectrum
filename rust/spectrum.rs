@@ -488,12 +488,8 @@ fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
                 None => {
                     match env.get(sym) {
                         // fall through to env...
-                        //Some(val) => Ok(val.clone()),
-                        Some(val) => {
-                            println!("{}", scheme_repr(val).unwrap());
-                            Ok(SchemeExpr::SchemeNull)
-                        },
-                        None => Err(format!("symbol not defined: {}", sym)),
+                        Some(val) => Ok(val.clone()),
+                        None => Err(format!("identifier not defined: {}", sym)),
                     }
                 }
             }
