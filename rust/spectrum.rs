@@ -174,7 +174,7 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, String> {
  * This function takes a flat sequence of string tokens (as output by scheme_tokenize) and parses
  * into a SchemeExpression (eg, a nested list of expressions).
  */
-fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr>, usize), String> {
+fn scheme_parse(tokens: &Vec<&str>, depth: u32) -> Result<(Vec<SchemeExpr>, usize), String> {
     let mut i: usize = 0;
     if tokens.len() == 0  {
         return Ok((vec![SchemeExpr::SchemeNull], 0));
@@ -265,7 +265,7 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, String> {
 
 //////////// Expression Evaluation
 
-fn quote_action<'a>(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
+fn quote_action(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     // XXX: why can't I '.map()' here? (try .iter().skip(1)...)
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
@@ -274,9 +274,9 @@ fn quote_action<'a>(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     Ok(SchemeExpr::SchemeQuote(body))
 }
 
-fn cond_action<'a, 'b>(list: &Vec<SchemeExpr>,
-                       ctx: HashMap<String, SchemeExpr>,
-                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
+fn cond_action(list: &Vec<SchemeExpr>,
+               ctx: HashMap<String, SchemeExpr>,
+               env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     for line in list.iter().skip(1) {
         match line {
             &SchemeExpr::SchemeList(ref inner) => {
@@ -299,8 +299,8 @@ fn cond_action<'a, 'b>(list: &Vec<SchemeExpr>,
     Ok(SchemeExpr::SchemeNull)
 }
 
-fn lambda_action<'a>(list: &Vec<SchemeExpr>,
-                     ctx: HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
+fn lambda_action(list: &Vec<SchemeExpr>,
+                 ctx: HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     if list.len() < 3 {
         return Err(format!("lambda must have a bind and at least one body expr"));
     }
@@ -322,7 +322,7 @@ fn lambda_action<'a>(list: &Vec<SchemeExpr>,
     Ok(SchemeExpr::SchemeProcedure(binds, body, ctx.clone()))
 }
 
-fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
+fn apply_math_op(action: &str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     if args.len() < 2 {
         return Err(format!("math builtins take two or more args (at {})", action));
     }
@@ -345,7 +345,7 @@ fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExp
     Ok(SchemeExpr::SchemeNum(ret))
 }
 
-fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
+fn apply_typecheck(action: &str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     if args.len() != 1 {
         return Err(format!("typecheck builtins take a single argument (for {})", action));
     }
@@ -375,9 +375,9 @@ fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeE
  * This function is sort of the heart the program: it takes a non-builtin SchemeProcedure (aka, a
  * parsed lambda expression) and applies it to arguments.
  */
-fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
-                        ctx: HashMap<String, SchemeExpr>,
-                        env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
+fn apply_action(list: &Vec<SchemeExpr>,
+                ctx: HashMap<String, SchemeExpr>,
+                env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     if list.len() == 0 {
         // TODO: is this correct?
         return Ok(SchemeExpr::SchemeNull);
@@ -503,9 +503,9 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
 /*
  * This is the main entry point for eval: it recursively evaluates an AST and returns the result.
  */
-fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
-                          ctx: HashMap<String, SchemeExpr>,
-                          env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
+fn scheme_meaning(ast: &SchemeExpr,
+                  ctx: HashMap<String, SchemeExpr>,
+                  env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
 
     return match ast {
             // "identity actions"
@@ -560,8 +560,8 @@ fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
     }
 }
 
-fn scheme_eval<'a, 'b>(ast: &'a SchemeExpr,
-                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
+fn scheme_eval(ast: &SchemeExpr,
+               env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     let ctx = HashMap::<String, SchemeExpr>::new();
     Ok(try!(scheme_meaning(ast, ctx, env)))
 }
