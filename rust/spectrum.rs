@@ -511,7 +511,12 @@ fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
                     apply_action(&list, ctx, env),
                 SchemeExpr::SchemeList(_) =>
                     apply_action(&list, ctx, env),
-                _ => Ok(SchemeExpr::SchemeNull)
+                SchemeExpr::SchemeIdentifier(_) =>
+                    apply_action(&list, ctx, env),
+                _ => {
+                    Err(format!("unexpected head of expression: {}",
+                                scheme_repr(&list[0]).unwrap()))
+                }
             }
         },
     }
