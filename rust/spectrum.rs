@@ -13,9 +13,10 @@ use std::collections::HashMap;
 
 //////////// Types and Constants
 
-// TODO: how to avoid the '32' here?
-const SCHEME_BUILTINS: [&'static str; 32] = [
+// TODO: how to avoid the '34' here?
+const SCHEME_BUILTINS: [&'static str; 34] = [
     "lambda", "quote", "cond", "else", "display",
+    "define", "set!",
     "cons", "car", "cdr",
     "boolean?", "symbol?", "procedure?", "pair?", "number?", "string?",
     "null?", "atom?", "zero?",
@@ -28,21 +29,21 @@ const SCHEME_BUILTINS: [&'static str; 32] = [
 // The SchemeExpr type is basically the complete AST.
 // There doesn't seem to be a symbol or quote type in Rust, so i'm using typed strings.
 #[derive(Clone, PartialEq)]
-enum SchemeExpr<'a> {
+enum SchemeExpr {
     SchemeNull,
     SchemeTrue,
     SchemeFalse,
     SchemeNum(f64),
-    SchemeBuiltin(&'a str),
-    SchemeSymbol(&'a str),
-    SchemeIdentifier(&'a str),
-    SchemeStr(&'a str),
+    SchemeBuiltin(String),
+    SchemeSymbol(String),
+    SchemeIdentifier(String),
+    SchemeStr(String),
     SchemeProcedure(
-        Vec<&'a str>,
-        Vec<SchemeExpr<'a>>,
-        HashMap<&'a str, SchemeExpr<'a>>),
-    SchemeList(Vec<SchemeExpr<'a>>),
-    SchemeQuote(Vec<SchemeExpr<'a>>),
+        Vec<String>,
+        Vec<SchemeExpr>,
+        HashMap<String, SchemeExpr>),
+    SchemeList(Vec<SchemeExpr>),
+    SchemeQuote(Vec<SchemeExpr>),
 }
 
 //////////// Lexing, Parsing, and Printing
@@ -142,7 +143,7 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
 
     // Is it a builtin?
     if SCHEME_BUILTINS.contains(&token) {
-        return Ok(SchemeExpr::SchemeBuiltin(token));
+        return Ok(SchemeExpr::SchemeBuiltin(token.to_string()));
     }
 
     // Try to parse as a number
@@ -153,17 +154,17 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
 
     // Is it a string?
     if token.starts_with("\"") && token.ends_with("\"") {
-        return Ok(SchemeExpr::SchemeStr(token));
+        return Ok(SchemeExpr::SchemeStr(token.to_string()));
     }
 
     // Is it a symbol?
     if token.starts_with("'") && is_valid_identifier(&token[1..]) {
-        return Ok(SchemeExpr::SchemeSymbol(token));
+        return Ok(SchemeExpr::SchemeSymbol(token.to_string()));
     }
 
     // Else, we'll treat it as an identifier
     if is_valid_identifier(token) {
-        return Ok(SchemeExpr::SchemeIdentifier(token));
+        return Ok(SchemeExpr::SchemeIdentifier(token.to_string()));
     }
 
     return Err("unparsable token");
@@ -173,7 +174,7 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
  * This function takes a flat sequence of string tokens (as output by scheme_tokenize) and parses
  * into a SchemeExpression (eg, a nested list of expressions).
  */
-fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr<'a>>, usize), &'static str> {
+fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr>, usize), &'static str> {
     let mut i: usize = 0;
     if tokens.len() == 0  {
         return Ok((vec![SchemeExpr::SchemeNull], 0));
@@ -229,10 +230,10 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
         &SchemeExpr::SchemeFalse => Ok("#f".to_string()),
         &SchemeExpr::SchemeNull => Ok("'()".to_string()),
         &SchemeExpr::SchemeNum(num) => Ok(format!("{}", num).to_string()),
-        &SchemeExpr::SchemeBuiltin(b)=> Ok(b.to_string()),
-        &SchemeExpr::SchemeStr(s)=> Ok(s.to_string()),
-        &SchemeExpr::SchemeSymbol(s)=> Ok(s.to_string()),
-        &SchemeExpr::SchemeIdentifier(s)=> Ok("'".to_string() + s),
+        &SchemeExpr::SchemeBuiltin(ref b)=> Ok(b.clone()),
+        &SchemeExpr::SchemeStr(ref s)=> Ok(s.clone()),
+        &SchemeExpr::SchemeSymbol(ref s)=> Ok(s.clone()),
+        &SchemeExpr::SchemeIdentifier(ref s)=> Ok("'".to_string() + &s),
         &SchemeExpr::SchemeProcedure(ref binds, ref body, _) => {
             let mut ret = "(lambda (".to_string();
             for bind in binds {
@@ -264,8 +265,7 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
 
 //////////// Expression Evaluation
 
-#[allow(unused_variables)]
-fn quote_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn quote_action<'a>(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> {
     // XXX: why can't I '.map()' here? (try .iter().skip(1)...)
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
@@ -274,7 +274,9 @@ fn quote_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&str, SchemeExpr<'a
     Ok(SchemeExpr::SchemeQuote(body))
 }
 
-fn cond_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn cond_action<'a, 'b>(list: &Vec<SchemeExpr>,
+                       ctx: HashMap<String, SchemeExpr>,
+                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
     for line in list.iter().skip(1) {
         match line {
             &SchemeExpr::SchemeList(ref inner) => {
@@ -283,9 +285,9 @@ fn cond_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<
                 }
                 let pred = &inner[0];
                 let val = &inner[1];
-                let m = try!(scheme_meaning(&pred, ctx.clone()));
+                let m = try!(scheme_meaning(&pred, ctx.clone(), env));
                 if m != SchemeExpr::SchemeFalse && m != SchemeExpr::SchemeNull {
-                    return scheme_meaning(&val, ctx);
+                    return scheme_meaning(&val, ctx, env);
                 } },
             _ => {
                 return Err("cond must contain tuples of (predicate, value)"); },
@@ -295,19 +297,20 @@ fn cond_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<
     Ok(SchemeExpr::SchemeNull)
 }
 
-fn lambda_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn lambda_action<'a>(list: &Vec<SchemeExpr>,
+                     ctx: HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
     if list.len() < 3 {
         return Err("lambda must have a bind and at least one body expr");
     }
-    let mut binds = Vec::<&str>::new();
+    let mut binds = Vec::<String>::new();
     let bind_list = match &list[1] {
         &SchemeExpr::SchemeList(ref bl) => bl,
         _ => { return Err("second arg to lambda must be a list of binds") },
     };
     for bind in bind_list {
         match bind {
-            &SchemeExpr::SchemeIdentifier(name) =>
-                binds.push(name),
+            &SchemeExpr::SchemeIdentifier(ref name) =>
+                binds.push(name.clone()),
             _ => return Err("lambda binds must all be non-builtin symbols")
         }
     }
@@ -315,7 +318,7 @@ fn lambda_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExp
     Ok(SchemeExpr::SchemeProcedure(binds, body, ctx.clone()))
 }
 
-fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> {
     if args.len() < 2 {
         return Err("math builtins take two or more args");
     }
@@ -337,7 +340,7 @@ fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExp
     Ok(SchemeExpr::SchemeNum(ret))
 }
 
-fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr<'a>, &'static str> {
+fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> {
     if args.len() != 1 {
         return Err("typecheck builtins take a single argument");
     }
@@ -367,16 +370,20 @@ fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeE
  * This function is sort of the heart the program: it takes a non-builtin SchemeProcedure (aka, a
  * parsed lambda expression) and applies it to arguments.
  */
-fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
+                        ctx: HashMap<String, SchemeExpr>,
+                        env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
     if list.len() == 0 {
         // TODO: is this correct?
         return Ok(SchemeExpr::SchemeNull);
     }
     let action = &list[0];
-    let args: Vec<SchemeExpr> = list.iter().skip(1).map(|x| scheme_meaning(x, ctx.clone()).unwrap()).collect();
+    // TODO: make this a single line?
+    let arg_meanings: Result<Vec<_>, _> = list.iter().skip(1).map(|x| scheme_meaning(x, ctx.clone(), env)).collect();
+    let args: Vec<SchemeExpr> = try!(arg_meanings);
     match action {
-        &SchemeExpr::SchemeBuiltin(builtin) => {
-            return match builtin {
+        &SchemeExpr::SchemeBuiltin(ref builtin) => {
+            return match builtin.as_str() {
                 "+" | "-" | "*" | "/" => apply_math_op(builtin, args),
                 "null?" | "number?" | "zero?" | "atom?" => apply_typecheck(builtin, args),
                 "eq?" => {
@@ -427,7 +434,7 @@ fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr
                 _ => Err("unimplemented builtin"),
             }; },
         &SchemeExpr::SchemeList(_) => {
-            let procedure: SchemeExpr = try!(scheme_meaning(&action, ctx.clone()));
+            let procedure: SchemeExpr = try!(scheme_meaning(&action, ctx.clone(), env));
             match procedure {
                 SchemeExpr::SchemeProcedure(binds, body, proc_ctx) => {
                     // This block of code implements procedure (lambda) application
@@ -439,9 +446,9 @@ fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr
                     }
                     let mut closure = proc_ctx.clone();
                     for (name, arg) in binds.iter().zip(args) {
-                        closure.insert(name, arg.clone());
+                        closure.insert(name.clone(), arg.clone());
                     }
-                    return scheme_meaning(&body[0], closure);
+                    return scheme_meaning(&body[0], closure, env);
                 },
                 _ => { return Err("non-procedure at head of expression"); },
                 } },
@@ -452,7 +459,10 @@ fn apply_action<'a>(list: &Vec<SchemeExpr<'a>>, ctx: HashMap<&'a str, SchemeExpr
 /*
  * This is the main entry point for eval: it recursively evaluates an AST and returns the result.
  */
-fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>>) -> Result<SchemeExpr<'a>, &'static str> {
+fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
+                          ctx: HashMap<String, SchemeExpr>,
+                          env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+
     return match ast {
             // "identity actions"
         &SchemeExpr::SchemeTrue         => Ok(ast.clone()),
@@ -465,42 +475,55 @@ fn scheme_meaning<'a>(ast: &SchemeExpr<'a>, ctx: HashMap<&'a str, SchemeExpr<'a>
         &SchemeExpr::SchemeProcedure(_, _, _) => Ok(ast.clone()),
         &SchemeExpr::SchemeQuote(ref list)
                                         => Ok(SchemeExpr::SchemeList(list.clone())),
-        &SchemeExpr::SchemeIdentifier(sym)  => match ctx.get(sym) {
-            // the "lookup action"
-            Some(val) => Ok(val.clone()),
-            None => Err("symbol not defined"),
+        &SchemeExpr::SchemeIdentifier(ref sym)  => {
+            match ctx.get(sym) {
+                // the "lookup action"
+                Some(val) => Ok(val.clone()),
+                None => {
+                    match env.get(sym) {
+                        // fall through to env...
+                        //Some(val) => Ok(val.clone()),
+                        Some(val) => {
+                            println!("{}", scheme_repr(val).unwrap());
+                            Ok(SchemeExpr::SchemeNull)
+                        },
+                        None => Err("symbol not defined"),
+                    }
+                }
+            }
         },
         &SchemeExpr::SchemeList(ref list) => {
             if list.len() == 0 {
                 return Ok(SchemeExpr::SchemeNull);
             }
             match list[0] {
-                SchemeExpr::SchemeBuiltin("quote") =>
-                    quote_action(&list, ctx),
-                SchemeExpr::SchemeBuiltin("cond") =>
-                    cond_action(&list, ctx),
-                SchemeExpr::SchemeBuiltin("lambda") =>
+                SchemeExpr::SchemeBuiltin(ref b) if b == "quote" =>
+                    quote_action(&list),
+                SchemeExpr::SchemeBuiltin(ref b) if b == "cond" =>
+                    cond_action(&list, ctx, env),
+                SchemeExpr::SchemeBuiltin(ref b) if b == "lambda" =>
                     lambda_action(&list, ctx),
                 SchemeExpr::SchemeBuiltin(_) =>
-                    apply_action(&list, ctx),
+                    apply_action(&list, ctx, env),
                 SchemeExpr::SchemeProcedure(_, _, _) =>
-                    apply_action(&list, ctx),
+                    apply_action(&list, ctx, env),
                 SchemeExpr::SchemeList(_) =>
-                    apply_action(&list, ctx),
+                    apply_action(&list, ctx, env),
                 _ => Ok(SchemeExpr::SchemeNull)
             }
         },
     }
 }
 
-fn scheme_eval<'a>(ast: &'a SchemeExpr) -> Result<SchemeExpr<'a>, &'static str> {
-    let ctx = HashMap::<&str, SchemeExpr>::new();
-    Ok(try!(scheme_meaning(ast, ctx)))
+fn scheme_eval<'a, 'b>(ast: &'a SchemeExpr,
+                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+    let ctx = HashMap::<String, SchemeExpr>::new();
+    Ok(try!(scheme_meaning(ast, ctx, env)))
 }
 
 //////////// Top-Level Program
 
-fn repl(verbose: bool) {
+fn repl<'b>(verbose: bool, top_env: &mut HashMap<String, SchemeExpr>) {
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -550,7 +573,7 @@ fn repl(verbose: bool) {
                 continue;
             }
         };
-        let resp = match scheme_eval(&ast) {
+        let resp = match scheme_eval(&ast, top_env) {
             Ok(x) => x,
             Err(e) => {
                 println!("couldn't eval: {}", e);
@@ -563,7 +586,9 @@ fn repl(verbose: bool) {
 
 fn main() {
 
+    let mut top_env = HashMap::<String, SchemeExpr>::new();
+
     // For now only REPL mode is implemented
-    repl(true);
+    repl(true, &mut top_env);
 }
 
