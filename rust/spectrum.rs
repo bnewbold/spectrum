@@ -18,8 +18,7 @@ const SCHEME_BUILTINS: [&'static str; 34] = [
     "lambda", "quote", "cond", "else", "display",
     "define", "set!",
     "cons", "car", "cdr",
-    "boolean?", "symbol?", "procedure?", "pair?", "number?", "string?",
-    "null?", "atom?", "zero?",
+    "boolean?", "symbol?", "procedure?", "pair?", "number?", "string?", "null?", "atom?", "zero?",
     "eq?",
     "=", ">", ">=", "<", "<=",
     "+", "-", "*", "/",
@@ -351,17 +350,36 @@ fn apply_typecheck(action: &str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, St
     }
     let arg: &SchemeExpr = &args[0];
     let ret: bool = match action {
-        "null?"   => *arg == SchemeExpr::SchemeNull,
-        "zero?"   => *arg == SchemeExpr::SchemeNum(0.0),
+        "boolean?"   => *arg == SchemeExpr::SchemeTrue || *arg == SchemeExpr::SchemeFalse,
+        "symbol?"   => match *arg {
+            SchemeExpr::SchemeSymbol(_) => true,
+            _ => false,
+        },
+        "procedure?"   => match *arg {
+            SchemeExpr::SchemeProcedure(_, _, _) => true,
+            _ => false,
+        },
+        "pair?"   => match *arg {
+            SchemeExpr::SchemeList(_) => true,
+            _ => false,
+        },
         "number?" => match *arg {
             SchemeExpr::SchemeNum(_) => true,
-            _ => false},
+            _ => false
+        },
+        "string?"   => match *arg {
+            SchemeExpr::SchemeStr(_) => true,
+            _ => false,
+        },
+        "null?"   => *arg == SchemeExpr::SchemeNull,
         "atom?"   => match *arg {
             SchemeExpr::SchemeNull |
                 SchemeExpr::SchemeTrue |
                 SchemeExpr::SchemeFalse |
                 SchemeExpr::SchemeNum(_) => true,
-            _ => false},
+            _ => false
+        },
+        "zero?"   => *arg == SchemeExpr::SchemeNum(0.0),
         _ => { return Err(format!("unimplemented typecheck builtin: {}", action)); },
     };
     if ret {
@@ -431,7 +449,8 @@ fn apply_action(list: &Vec<SchemeExpr>,
         &SchemeExpr::SchemeBuiltin(ref builtin) => {
             return match builtin.as_str() {
                 "+" | "-" | "*" | "/" => apply_math_op(builtin, args),
-                "null?" | "number?" | "zero?" | "atom?" => apply_typecheck(builtin, args),
+                "boolean?" | "symbol?" | "procedure?" | "pair?" | "number?" | "string?" |
+                    "null?" | "atom?" | "zero?" => apply_typecheck(builtin, args),
                 "eq?" => {
                     if args.len() != 2 {
                         return Err(format!("eq? takes only two arguments"));
