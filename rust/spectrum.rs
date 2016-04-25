@@ -63,8 +63,8 @@ fn is_valid_identifier(s: &str) -> bool {
     if s.starts_with("-") || s.ends_with("-") {
         return false;
     }
-    for c in s.chars() {
-        if !(c.is_alphabetic() || c == '-') {
+    for (i, c) in s.chars().enumerate() {
+        if !(c.is_alphabetic() || c == '-' || (c.is_numeric() && i > 0)) {
             return false;
         }
     }
