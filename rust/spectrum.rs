@@ -13,9 +13,10 @@ use std::collections::HashMap;
 
 //////////// Types and Constants
 
-// TODO: how to avoid the '34' here?
-const SCHEME_BUILTINS: [&'static str; 34] = [
-    "lambda", "quote", "cond", "else", "display",
+// TODO: how to avoid the '35' here?
+const SCHEME_BUILTINS: [&'static str; 35] = [
+    "lambda", "quote", "cond", "else",
+    "display", "newline",
     "define", "set!",
     "cons", "car", "cdr",
     "boolean?", "symbol?", "procedure?", "pair?", "number?", "string?", "null?", "atom?", "zero?",
@@ -543,6 +544,16 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         },
                         _ => Err(format!("cdr takes only lists"))
                     }
+                },
+                "display" => {
+                    for expr in args {
+                        print!("{}", try!(scheme_repr(&expr)));
+                    }
+                    Ok(SchemeExpr::SchemeNull)
+                },
+                "newline" => {
+                    println!("");
+                    Ok(SchemeExpr::SchemeNull)
                 },
                 _ => Err(format!("unimplemented builtin: {}", builtin)),
             };
