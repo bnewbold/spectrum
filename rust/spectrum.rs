@@ -76,7 +76,7 @@ fn is_valid_identifier(s: &str) -> bool {
  * This function takes a raw string and splits it up into a flat sequence of string tokens.
  * It should handle basic quotes (double quotes only) and comments (';' character to end-of-line).
  */
-fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
+fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, String> {
     let mut ret = Vec::<&str>::new();
     let mut food: usize = 0;    // "how many chars of current token have we read?"
     let mut quoted: bool = false;
@@ -89,7 +89,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
                 quoted = false;
                 food = 0;
             } else if raw_str.len() == i+1 {
-                return Err("unmatched quote char");
+                return Err(format!("unmatched quote char"));
             } else {
                 food += 1;
             }
@@ -105,7 +105,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
             food = 0;
         } else if c == '"' {
             if food > 0 {
-                return Err("unexpected quote char");
+                return Err(format!("unexpected quote char"));
             }
             quoted = true;
         } else if is_scheme_whitespace(c) || is_scheme_sep(c) {
@@ -124,7 +124,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
         }
     }
     if quoted {
-        return Err("unmatched (trailing) quote char");
+        return Err(format!("unmatched (trailing) quote char"));
     }
     return Ok(ret);
 }
@@ -132,7 +132,7 @@ fn scheme_tokenize<'a>(raw_str: &'a str) -> Result<Vec<&'a str>, &'static str> {
 /*
  * This function takes a token (still a string) and parses it into a single SchemeExpression
  */
-fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
+fn scheme_parse_token(token: &str) -> Result<SchemeExpr, String> {
 
     // Is it a constant?
     match token {
@@ -167,14 +167,14 @@ fn scheme_parse_token(token: &str) -> Result<SchemeExpr, &'static str> {
         return Ok(SchemeExpr::SchemeIdentifier(token.to_string()));
     }
 
-    return Err("unparsable token");
+    return Err(format!("unparsable token: \"{}\"", token));
 }
 
 /*
  * This function takes a flat sequence of string tokens (as output by scheme_tokenize) and parses
  * into a SchemeExpression (eg, a nested list of expressions).
  */
-fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr>, usize), &'static str> {
+fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr>, usize), String> {
     let mut i: usize = 0;
     if tokens.len() == 0  {
         return Ok((vec![SchemeExpr::SchemeNull], 0));
@@ -202,7 +202,7 @@ fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr
             },
             ")" => {
                 if depth == 0 {
-                    return Err("missing an open bracket");
+                    return Err(format!("missing an open bracket"));
                 }
                 return Ok((ret, parsed));
             },
@@ -214,7 +214,7 @@ fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr
         i += 1;
     }
     if depth > 0 {
-        return Err("missing a close bracket");
+        return Err(format!("missing a close bracket"));
     }
     return Ok((ret, parsed));
 }
@@ -224,7 +224,7 @@ fn scheme_parse<'a>(tokens: &Vec<&'a str>, depth: u32) -> Result<(Vec<SchemeExpr
  * It's basically the inverse of scheme_tokenize and scheme_parse; the output representation is
  * just plain old LISP/Scheme s-expr syntax.
  */
-fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
+fn scheme_repr(ast: &SchemeExpr) -> Result<String, String> {
     return match ast {
         &SchemeExpr::SchemeTrue => Ok("#t".to_string()),
         &SchemeExpr::SchemeFalse => Ok("#f".to_string()),
@@ -265,7 +265,7 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, &'static str> {
 
 //////////// Expression Evaluation
 
-fn quote_action<'a>(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+fn quote_action<'a>(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     // XXX: why can't I '.map()' here? (try .iter().skip(1)...)
     let mut body = Vec::<SchemeExpr>::new();
     for el in list[1..].to_vec() {
@@ -276,12 +276,13 @@ fn quote_action<'a>(list: &Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> 
 
 fn cond_action<'a, 'b>(list: &Vec<SchemeExpr>,
                        ctx: HashMap<String, SchemeExpr>,
-                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     for line in list.iter().skip(1) {
         match line {
             &SchemeExpr::SchemeList(ref inner) => {
                 if inner.len() != 2 {
-                    return Err("cond must contain tuples of (predicate, value) (len !=2)");
+                    return Err(format!("cond must contain tuples of (predicate, value) (len !=2) at: {}",
+                                       scheme_repr(line).unwrap()));
                 }
                 let pred = &inner[0];
                 let val = &inner[1];
@@ -290,7 +291,8 @@ fn cond_action<'a, 'b>(list: &Vec<SchemeExpr>,
                     return scheme_meaning(&val, ctx, env);
                 } },
             _ => {
-                return Err("cond must contain tuples of (predicate, value)"); },
+                return Err(format!("cond must contain tuples of (predicate, value); got: {}",
+                                   scheme_repr(line).unwrap())); },
         }
     }
     // "undefined", return empty tuple
@@ -298,35 +300,38 @@ fn cond_action<'a, 'b>(list: &Vec<SchemeExpr>,
 }
 
 fn lambda_action<'a>(list: &Vec<SchemeExpr>,
-                     ctx: HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+                     ctx: HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     if list.len() < 3 {
-        return Err("lambda must have a bind and at least one body expr");
+        return Err(format!("lambda must have a bind and at least one body expr"));
     }
     let mut binds = Vec::<String>::new();
     let bind_list = match &list[1] {
         &SchemeExpr::SchemeList(ref bl) => bl,
-        _ => { return Err("second arg to lambda must be a list of binds") },
+        _ => { return Err(format!("second arg to lambda must be a list of binds; got: {}",
+                                  scheme_repr(&list[1]).unwrap())); },
     };
     for bind in bind_list {
         match bind {
             &SchemeExpr::SchemeIdentifier(ref name) =>
                 binds.push(name.clone()),
-            _ => return Err("lambda binds must all be non-builtin symbols")
+            _ => return Err(format!("lambda binds must all be non-builtin symbols; got: {}",
+                                    scheme_repr(bind).unwrap()))
         }
     }
     let body = list.iter().skip(2).map(|x| x.clone()).collect();
     Ok(SchemeExpr::SchemeProcedure(binds, body, ctx.clone()))
 }
 
-fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     if args.len() < 2 {
-        return Err("math builtins take two or more args");
+        return Err(format!("math builtins take two or more args (at {})", action));
     }
     let mut vals = Vec::<f64>::new();
     for arg in args {
         match arg {
             SchemeExpr::SchemeNum(x) => { vals.push(x) },
-            _ => { return Err("math builtins take only numerical types") },
+            _ => { return Err(format!("math builtins take only numerical types (got {})",
+                                      scheme_repr(&arg).unwrap())) },
         }
     }
 
@@ -335,14 +340,14 @@ fn apply_math_op<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExp
         "*"     => vals.iter().fold(1., |a, &b| a * b),
         "-"     => vals[1..].iter().fold(vals[0], |a, &b| a - b),
         "/"     => vals[1..].iter().fold(vals[0], |a, &b| a / b),
-        _ => { return Err("unimplemented math operation"); },
+        _ => { return Err(format!("unimplemented math operation: {}", action)); },
     };
     Ok(SchemeExpr::SchemeNum(ret))
 }
 
-fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     if args.len() != 1 {
-        return Err("typecheck builtins take a single argument");
+        return Err(format!("typecheck builtins take a single argument (for {})", action));
     }
     let arg: &SchemeExpr = &args[0];
     let ret: bool = match action {
@@ -357,7 +362,7 @@ fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeE
                 SchemeExpr::SchemeFalse |
                 SchemeExpr::SchemeNum(_) => true,
             _ => false},
-        _ => { return Err("unimplemented typecheck builtin"); },
+        _ => { return Err(format!("unimplemented typecheck builtin: {}", action)); },
     };
     if ret {
         Ok(SchemeExpr::SchemeTrue)
@@ -372,7 +377,7 @@ fn apply_typecheck<'a>(action: &'a str, args: Vec<SchemeExpr>) -> Result<SchemeE
  */
 fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                         ctx: HashMap<String, SchemeExpr>,
-                        env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+                        env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     if list.len() == 0 {
         // TODO: is this correct?
         return Ok(SchemeExpr::SchemeNull);
@@ -388,7 +393,7 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                 "null?" | "number?" | "zero?" | "atom?" => apply_typecheck(builtin, args),
                 "eq?" => {
                     if args.len() != 2 {
-                        return Err("eq? takes only two arguments");
+                        return Err(format!("eq? takes only two arguments"));
                     }
                     if args[0] == args[1] {
                         return Ok(SchemeExpr::SchemeTrue)
@@ -398,29 +403,29 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                 },
                 "car" => {
                     if args.len() != 1 {
-                        return Err("car takes a single list argument");
+                        return Err(format!("car takes a single list argument"));
                     }
                     match &args[0] {
                         &SchemeExpr::SchemeList(ref list) => {
                             Ok(list[0].clone())
                         },
-                        _ => Err("cdr takes only lists")
+                        _ => Err(format!("cdr takes only lists"))
                     }
                 },
                 "cdr" => {
                     if args.len() != 1 {
-                        return Err("cdr takes a single list argument");
+                        return Err(format!("cdr takes a single list argument"));
                     }
                     match &args[0] {
                         &SchemeExpr::SchemeList(ref list) => {
                             Ok(SchemeExpr::SchemeList(list[1..].to_vec()))
                         },
-                        _ => Err("car takes only lists")
+                        _ => Err(format!("car takes only lists"))
                     }
                 },
                 "cons" => {
                     if args.len() != 2 {
-                        return Err("cons takes two arguments");
+                        return Err(format!("cons takes two arguments"));
                     }
                     match &args[1] {
                         &SchemeExpr::SchemeList(ref list) => {
@@ -428,10 +433,10 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                             ret.extend_from_slice(list);
                             Ok(SchemeExpr::SchemeList(ret))
                         },
-                        _ => Err("cdr takes only lists")
+                        _ => Err(format!("cdr takes only lists"))
                     }
                 },
-                _ => Err("unimplemented builtin"),
+                _ => Err(format!("unimplemented builtin: {}", builtin)),
             }; },
         &SchemeExpr::SchemeList(_) => {
             let procedure: SchemeExpr = try!(scheme_meaning(&action, ctx.clone(), env));
@@ -439,10 +444,10 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                 SchemeExpr::SchemeProcedure(binds, body, proc_ctx) => {
                     // This block of code implements procedure (lambda) application
                     if body.len() != 1 {
-                        return Err("prodedure must have single-expression body");
+                        return Err(format!("prodedure must have single-expression body"));
                     }
                     if binds.len() != args.len() {
-                        return Err("wrong number of args to procedure");
+                        return Err(format!("wrong number of args to procedure"));
                     }
                     let mut closure = proc_ctx.clone();
                     for (name, arg) in binds.iter().zip(args) {
@@ -450,9 +455,10 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
                     }
                     return scheme_meaning(&body[0], closure, env);
                 },
-                _ => { return Err("non-procedure at head of expression"); },
+                _ => { return Err(format!("non-procedure at head of expression: {}",
+                                          scheme_repr(&procedure).unwrap())); },
                 } },
-        _ => { return Err("apply called with something non-applicable"); },
+        _ => { return Err(format!("apply called with something non-applicable")); },
     }
 }
 
@@ -461,7 +467,7 @@ fn apply_action<'a, 'b>(list: &Vec<SchemeExpr>,
  */
 fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
                           ctx: HashMap<String, SchemeExpr>,
-                          env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+                          env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
 
     return match ast {
             // "identity actions"
@@ -487,7 +493,7 @@ fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
                             println!("{}", scheme_repr(val).unwrap());
                             Ok(SchemeExpr::SchemeNull)
                         },
-                        None => Err("symbol not defined"),
+                        None => Err(format!("symbol not defined: {}", sym)),
                     }
                 }
             }
@@ -516,7 +522,7 @@ fn scheme_meaning<'a, 'b>(ast: &SchemeExpr,
 }
 
 fn scheme_eval<'a, 'b>(ast: &'a SchemeExpr,
-                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, &'static str> {
+                       env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     let ctx = HashMap::<String, SchemeExpr>::new();
     Ok(try!(scheme_meaning(ast, ctx, env)))
 }
