@@ -321,6 +321,52 @@ fn lambda_action(list: &Vec<SchemeExpr>,
     Ok(SchemeExpr::SchemeProcedure(binds, body, ctx.clone()))
 }
 
+fn apply_math_cmp(action: &str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
+    if args.len() != 2 {
+        return Err(format!("math comparisons take 2 args (at {})", action));
+    }
+    let mut vals = Vec::<f64>::new();
+    for arg in args {
+        match arg {
+            SchemeExpr::SchemeNum(x) => { vals.push(x) },
+            _ => { return Err(format!("math builtins take only numerical types (got {})",
+                                      scheme_repr(&arg).unwrap())) },
+        }
+    }
+
+    let ret: bool = match action {
+        "="     => vals[0] == vals[1],
+        ">"     => vals[0] > vals[1],
+        ">="    => vals[0] >= vals[1],
+        "<"     => vals[0] < vals[1],
+        "<="    => vals[0] <= vals[1],
+        _ => { return Err(format!("unexpected math builting: {}", action)); },
+    };
+    return Ok( if ret {SchemeExpr::SchemeTrue} else { SchemeExpr::SchemeFalse } );
+}
+
+fn apply_math_unary(action: &str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
+    if args.len() != 1 {
+        return Err(format!("math unary builtins only take one argument (at {})", action));
+    }
+    let val = match args[0] {
+        SchemeExpr::SchemeNum(x) => x,
+        _ => { return Err(format!("math builtins take only numerical types (got {})",
+                                  scheme_repr(&args[0]).unwrap()))
+        },
+    };
+
+    let ret: f64 = match action {
+        "exp"     => val.exp(),
+        "log"     => val.ln(),
+        "sin"     => val.sin(),
+        "cos"     => val.cos(),
+        "tan"     => val.tan(),
+        _ => { return Err(format!("unimplemented math operation: {}", action)); },
+    };
+    Ok(SchemeExpr::SchemeNum(ret))
+}
+
 fn apply_math_op(action: &str, args: Vec<SchemeExpr>) -> Result<SchemeExpr, String> {
     if args.len() < 2 {
         return Err(format!("math builtins take two or more args (at {})", action));
@@ -449,6 +495,8 @@ fn apply_action(list: &Vec<SchemeExpr>,
         &SchemeExpr::SchemeBuiltin(ref builtin) => {
             return match builtin.as_str() {
                 "+" | "-" | "*" | "/" => apply_math_op(builtin, args),
+                "=" | ">" | ">=" | "<" | "<=" => apply_math_cmp(builtin, args),
+                "exp"| "log" | "sin" | "cos" | "tan" => apply_math_unary(builtin, args),
                 "boolean?" | "symbol?" | "procedure?" | "pair?" | "number?" | "string?" |
                     "null?" | "atom?" | "zero?" => apply_typecheck(builtin, args),
                 "eq?" => {
