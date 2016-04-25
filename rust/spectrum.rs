@@ -469,7 +469,7 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         &SchemeExpr::SchemeList(ref list) => {
                             Ok(list[0].clone())
                         },
-                        _ => Err(format!("cdr takes only lists"))
+                        _ => Err(format!("cdr only takes lists"))
                     }
                 },
                 "cdr" => {
@@ -480,7 +480,7 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         &SchemeExpr::SchemeList(ref list) => {
                             Ok(SchemeExpr::SchemeList(list[1..].to_vec()))
                         },
-                        _ => Err(format!("car takes only lists"))
+                        _ => Err(format!("car only takes lists"))
                     }
                 },
                 "cons" => {
