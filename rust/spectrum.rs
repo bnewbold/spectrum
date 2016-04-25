@@ -8,7 +8,9 @@
  */
 
 use std::io;
-use std::io::Write;
+use std::io::{Write, Read};
+use std::fs::File;
+use std::path::Path;
 use std::collections::HashMap;
 
 //////////// Types and Constants
@@ -646,7 +648,7 @@ fn scheme_eval(ast: &SchemeExpr,
 
 //////////// Top-Level Program
 
-fn repl<'b>(verbose: bool, top_env: &mut HashMap<String, SchemeExpr>) {
+fn repl(verbose: bool, top_env: &mut HashMap<String, SchemeExpr>) {
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -707,9 +709,31 @@ fn repl<'b>(verbose: bool, top_env: &mut HashMap<String, SchemeExpr>) {
     }
 }
 
+fn import_file(fpath: &Path, top_env: &mut HashMap<String, SchemeExpr>) -> Result<(), String> {
+
+    let mut raw_bytes: Vec<u8> = Vec::new();
+
+    let mut f = File::open(fpath)
+        .expect(&format!("couldn't open file: {}", &fpath.to_str().unwrap()));
+    f.read_to_end(&mut raw_bytes)
+        .expect(&format!("couldn't read file: {}", &fpath.to_str().unwrap()));
+    let contents = String::from_utf8(raw_bytes)
+        .expect(&format!("UTF-8 decode error reading file: {}", &fpath.to_str().unwrap()));
+
+    let tokens = try!(scheme_tokenize(&contents));
+    let (ast_list, _) = try!(scheme_parse(&tokens, 0));
+    for ast in ast_list.iter() {
+        try!(scheme_eval(&ast, top_env));
+    };
+    Ok(())
+}
+
 fn main() {
 
     let mut top_env = HashMap::<String, SchemeExpr>::new();
+
+    let prelude_path = Path::new("../prelude.scm");
+    import_file(&prelude_path, &mut top_env).unwrap();
 
     // For now only REPL mode is implemented
     repl(true, &mut top_env);
