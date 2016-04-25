@@ -233,7 +233,7 @@ fn scheme_repr(ast: &SchemeExpr) -> Result<String, String> {
         &SchemeExpr::SchemeBuiltin(ref b)=> Ok(b.clone()),
         &SchemeExpr::SchemeStr(ref s)=> Ok(s.clone()),
         &SchemeExpr::SchemeSymbol(ref s)=> Ok(s.clone()),
-        &SchemeExpr::SchemeIdentifier(ref s)=> Ok("'".to_string() + &s),
+        &SchemeExpr::SchemeIdentifier(ref s)=> Ok(s.to_string()),
         &SchemeExpr::SchemeProcedure(ref binds, ref body, _) => {
             let mut ret = "(lambda (".to_string();
             for bind in binds {
