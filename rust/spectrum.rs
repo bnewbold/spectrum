@@ -7,7 +7,7 @@
  * Intentended to work with Rust 1.8 (stable from Spring 2016)
  */
 
-use std::io;
+use std::{io, env};
 use std::io::{Write, Read};
 use std::fs::File;
 use std::path::Path;
@@ -728,14 +728,53 @@ fn import_file(fpath: &Path, top_env: &mut HashMap<String, SchemeExpr>) -> Resul
     Ok(())
 }
 
+fn usage() {
+    println!("usage:\tspectrum [-h] [-v] [--no-repl] [<files>]");
+    println!("");
+    println!("Files will be loaded in order, then drop to REPL (unless \"--no-repl\" is passed).");
+    println!("Verbose flag (\"-v\") will result in lexed tokens and parsed AST being dumped to stdout (when on REPL)");
+}
+
 fn main() {
 
+    let mut verbose: bool = false;
+    let mut no_repl: bool = false;
     let mut top_env = HashMap::<String, SchemeExpr>::new();
 
     let prelude_path = Path::new("../prelude.scm");
     import_file(&prelude_path, &mut top_env).unwrap();
 
-    // For now only REPL mode is implemented
-    repl(true, &mut top_env);
+    for arg in env::args().skip(1) {
+        match &*arg {
+            "-v" | "--verbose"  => { verbose = true; },
+            "--no-repl"         => { no_repl = true; },
+            "-h" | "--help"     => { usage(); return; },
+            _ if arg.starts_with("-") => {
+                println!("Unknown option: {}", arg);
+                println!("");
+                usage();
+                return;
+            },
+            _ => {
+                let arg_path = Path::new(&arg);
+                println!("Loading {}...", arg);
+                if !arg_path.is_file() {
+                    println!("File not found (or not file): {}", arg);
+                    return;
+                }
+                match import_file(&arg_path, &mut top_env) {
+                    Err(e) => {
+                        println!("Error loading file: {}\n    {}", arg, e);
+                        return;
+                    },
+                    Ok(_) => ()
+                }
+            }
+        }
+    }
+
+    if !no_repl {
+        repl(verbose, &mut top_env);
+    }
 }
 
