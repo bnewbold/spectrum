@@ -520,7 +520,7 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         &SchemeExpr::SchemeList(ref list) => {
                             Ok(list[0].clone())
                         },
-                        _ => Err(format!("cdr only takes lists"))
+                        _ => Err(format!("car only takes lists"))
                     }
                 },
                 "cdr" => {
@@ -529,9 +529,13 @@ fn apply_action(list: &Vec<SchemeExpr>,
                     }
                     match &args[0] {
                         &SchemeExpr::SchemeList(ref list) => {
-                            Ok(SchemeExpr::SchemeList(list[1..].to_vec()))
+                            if list.len() > 1 {
+                                Ok(SchemeExpr::SchemeList(list[1..].to_vec()))
+                            } else {
+                                Ok(SchemeExpr::SchemeNull)
+                            }
                         },
-                        _ => Err(format!("car only takes lists"))
+                        _ => Err(format!("cdr only takes lists"))
                     }
                 },
                 "cons" => {
@@ -539,12 +543,15 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         return Err(format!("cons takes two arguments"));
                     }
                     match &args[1] {
+                        &SchemeExpr::SchemeNull => {
+                            Ok(SchemeExpr::SchemeList(vec![args[0].clone()]))
+                        },
                         &SchemeExpr::SchemeList(ref list) => {
                             let mut ret = vec![args[0].clone()];
                             ret.extend_from_slice(list);
                             Ok(SchemeExpr::SchemeList(ret))
                         },
-                        _ => Err(format!("cdr takes only lists"))
+                        _ => Err(format!("cons second arg must be list or null"))
                     }
                 },
                 "display" => {
