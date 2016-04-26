@@ -20,7 +20,7 @@
 (define first
   (lambda (p) (car p)))
 
-(define second 
+(define second
   (lambda (p) (car (cdr p))))
 
 (define third
@@ -58,7 +58,7 @@
   (lambda (name table table-f)
     (cond
      ((null? table) (table-f name))
-     (else (lookup-in-entry name 
+     (else (lookup-in-entry name
 			    (car table)
 			    (lambda (n)
 			      (lookup-in-table n (cdr table) table-f)))))))
@@ -105,9 +105,9 @@
 ; need generic true/false booleans, a number type, and a symbol type
 ; also need a mutable "table" collection
 (define *const
-  (lambda (e table) 
-    (cond          
-     ((number? e) e) 
+  (lambda (e table)
+    (cond
+     ((number? e) e)
      ((eq? e #t) #t)
      ((eq? e #f) #f)
      (else (build (quote builtin) e)))))

@@ -51,7 +51,7 @@ enum SchemeExpr {
 //////////// Lexing, Parsing, and Printing
 
 fn is_scheme_whitespace(c: char) -> bool{
-    " \r\n".find(c) != None
+    " \t\r\n".find(c) != None
 }
 
 fn is_scheme_sep(c: char) -> bool {
@@ -67,7 +67,7 @@ fn is_valid_identifier(s: &str) -> bool {
         return false;
     }
     for (i, c) in s.chars().enumerate() {
-        if !(c.is_alphabetic() || c == '*' || c == '?' || c == '!' || c == '-' || (c.is_numeric() && i > 0)) {
+        if !( c.is_alphabetic() || "*?!-:".find(c) != None || (c.is_numeric() && i > 0) ) {
             return false;
         }
     }
@@ -535,7 +535,11 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         &SchemeExpr::SchemeList(ref list) => {
                             Ok(list[0].clone())
                         },
-                        _ => Err(format!("car only takes lists"))
+                        &SchemeExpr::SchemeQuote(ref list) => {
+                            Ok(list[0].clone())
+                        },
+                        _ => Err(format!("car only takes lists and quotes (got {})",
+                                         scheme_repr(&args[0]).unwrap()))
                     }
                 },
                 "cdr" => {
@@ -550,7 +554,15 @@ fn apply_action(list: &Vec<SchemeExpr>,
                                 Ok(SchemeExpr::SchemeNull)
                             }
                         },
-                        _ => Err(format!("cdr only takes lists"))
+                        &SchemeExpr::SchemeQuote(ref list) => {
+                            if list.len() > 1 {
+                                Ok(SchemeExpr::SchemeList(list[1..].to_vec()))
+                            } else {
+                                Ok(SchemeExpr::SchemeNull)
+                            }
+                        },
+                        _ => Err(format!("cdr only takes lists and quotes (got {})",
+                                         scheme_repr(&args[0]):unwrap()))
                     }
                 },
                 "cons" => {
@@ -566,7 +578,12 @@ fn apply_action(list: &Vec<SchemeExpr>,
                             ret.extend_from_slice(list);
                             Ok(SchemeExpr::SchemeList(ret))
                         },
-                        _ => Err(format!("cons second arg must be list or null"))
+                        &SchemeExpr::SchemeQuote(ref list) => {
+                            let mut ret = vec![args[0].clone()];
+                            ret.extend_from_slice(list);
+                            Ok(SchemeExpr::SchemeList(ret))
+                        },
+                        _ => Err(format!("cons second arg must be list, quote, or null"))
                     }
                 },
                 "begin" => {
