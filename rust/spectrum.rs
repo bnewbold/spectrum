@@ -67,7 +67,7 @@ fn is_valid_identifier(s: &str) -> bool {
         return false;
     }
     for (i, c) in s.chars().enumerate() {
-        if !(c.is_alphabetic() || c == '-' || (c.is_numeric() && i > 0)) {
+        if !(c.is_alphabetic() || c == '*' || c == '?' || c == '!' || c == '-' || (c.is_numeric() && i > 0)) {
             return false;
         }
     }
