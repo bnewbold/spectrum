@@ -15,9 +15,9 @@ use std::collections::HashMap;
 
 //////////// Types and Constants
 
-// TODO: how to avoid the '35' here?
-const SCHEME_BUILTINS: [&'static str; 35] = [
-    "lambda", "quote", "cond", "else",
+// TODO: how to avoid the '37' here?
+const SCHEME_BUILTINS: [&'static str; 37] = [
+    "lambda", "quote", "cond", "else", "if", "begin",
     "display", "newline",
     "define", "set!",
     "cons", "car", "cdr",
@@ -301,6 +301,21 @@ fn cond_action(list: &Vec<SchemeExpr>,
     Ok(SchemeExpr::SchemeNull)
 }
 
+fn if_action(list: &Vec<SchemeExpr>,
+             ctx: HashMap<String, SchemeExpr>,
+             env: &mut HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
+
+    if list.len() != 4 {
+        return Err(format!("'if' must receive 3 arguments"));
+    }
+    let pred = try!(scheme_meaning(&list[1], ctx.clone(), env));
+    if pred != SchemeExpr::SchemeFalse && pred != SchemeExpr::SchemeNull {
+        return scheme_meaning(&list[2], ctx, env);
+    } else {
+        return scheme_meaning(&list[3], ctx, env);
+    }
+}
+
 fn lambda_action(list: &Vec<SchemeExpr>,
                  ctx: HashMap<String, SchemeExpr>) -> Result<SchemeExpr, String> {
     if list.len() < 3 {
@@ -554,6 +569,13 @@ fn apply_action(list: &Vec<SchemeExpr>,
                         _ => Err(format!("cons second arg must be list or null"))
                     }
                 },
+                "begin" => {
+                    let mut ret = SchemeExpr::SchemeNull;
+                    for expr in args {
+                        ret = try!(scheme_meaning(&expr, ctx.clone(), env));
+                    }
+                    Ok(ret)
+                },
                 "display" => {
                     for expr in args {
                         print!("{}", try!(scheme_repr(&expr)));
@@ -626,6 +648,8 @@ fn scheme_meaning(ast: &SchemeExpr,
             match list[0] {
                 SchemeExpr::SchemeBuiltin(ref b) if b == "quote" =>
                     quote_action(&list),
+                SchemeExpr::SchemeBuiltin(ref b) if b == "if" =>
+                    if_action(&list, ctx, env),
                 SchemeExpr::SchemeBuiltin(ref b) if b == "cond" =>
                     cond_action(&list, ctx, env),
                 SchemeExpr::SchemeBuiltin(ref b) if b == "lambda" =>
