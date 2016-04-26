@@ -7,7 +7,7 @@
  * Intentended to work with Rust 1.8 (stable from Spring 2016)
  */
 
-use std::{io, env};
+use std::{io, env, str};
 use std::io::{Write, Read};
 use std::fs::File;
 use std::path::Path;
@@ -716,6 +716,21 @@ fn repl(verbose: bool, top_env: &mut HashMap<String, SchemeExpr>) {
     }
 }
 
+/* This loads and evals the hard-coded prelude file (which is just scheme expressions compiled into
+ * the executable), saving the resulting defines in top_env.
+ */
+fn import_prelude(top_env: &mut HashMap<String, SchemeExpr>) -> Result<(), String> {
+
+    let raw_prelude = include_bytes!("prelude.scm");
+    let contents = str::from_utf8(raw_prelude).unwrap();
+    let tokens = try!(scheme_tokenize(contents));
+    let (ast_list, _) = try!(scheme_parse(&tokens, 0));
+    for ast in ast_list.iter() {
+        try!(scheme_eval(&ast, top_env));
+    };
+    Ok(())
+}
+
 fn import_file(fpath: &Path, top_env: &mut HashMap<String, SchemeExpr>) -> Result<(), String> {
 
     let mut raw_bytes: Vec<u8> = Vec::new();
@@ -736,25 +751,29 @@ fn import_file(fpath: &Path, top_env: &mut HashMap<String, SchemeExpr>) -> Resul
 }
 
 fn usage() {
-    println!("usage:\tspectrum [-h] [-v] [--no-repl] [<files>]");
+    println!("usage:\tspectrum [-h] [-v] [--no-repl] [--no-prelude] [<files>]");
     println!("");
     println!("Files will be loaded in order, then drop to REPL (unless \"--no-repl\" is passed).");
-    println!("Verbose flag (\"-v\") will result in lexed tokens and parsed AST being dumped to stdout (when on REPL)");
+    println!("Verbose flag (\"-v\") will result in lexed tokens and parsed AST \
+        being dumped to stdout (when on REPL).");
+    println!("A \"prelude\" of common Scheme/LISP functions (eg, cdaddr) will \
+        be loaded before any files (unless \"--no-prelude\" is passed).");
 }
 
 fn main() {
 
     let mut verbose: bool = false;
     let mut no_repl: bool = false;
+    let mut no_prelude: bool = false;
     let mut top_env = HashMap::<String, SchemeExpr>::new();
 
-    let prelude_path = Path::new("../prelude.scm");
-    import_file(&prelude_path, &mut top_env).unwrap();
+    let mut file_list = Vec::<String>::new();
 
     for arg in env::args().skip(1) {
         match &*arg {
             "-v" | "--verbose"  => { verbose = true; },
             "--no-repl"         => { no_repl = true; },
+            "--no-prelude"      => { no_prelude = true; },
             "-h" | "--help"     => { usage(); return; },
             _ if arg.starts_with("-") => {
                 println!("Unknown option: {}", arg);
@@ -763,20 +782,28 @@ fn main() {
                 return;
             },
             _ => {
-                let arg_path = Path::new(&arg);
-                println!("Loading {}...", arg);
-                if !arg_path.is_file() {
-                    println!("File not found (or not file): {}", arg);
-                    return;
-                }
-                match import_file(&arg_path, &mut top_env) {
-                    Err(e) => {
-                        println!("Error loading file: {}\n    {}", arg, e);
-                        return;
-                    },
-                    Ok(_) => ()
-                }
+                file_list.push(arg.clone());
             }
+        }
+    }
+
+    if !no_prelude {
+        import_prelude(&mut top_env).unwrap();
+    }
+
+    for fname in file_list {
+        let fpath = Path::new(&fname);
+        if !fpath.is_file() {
+            println!("File not found (or not file): {}", fname);
+            return;
+        }
+        println!("Loading {}...", fname);
+        match import_file(&fpath, &mut top_env) {
+            Err(e) => {
+                println!("Error loading file: {}\n    {}", fname, e);
+                return;
+            },
+            Ok(_) => ()
         }
     }
 
