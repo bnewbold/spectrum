@@ -27,5 +27,8 @@
     (cond ((null? l) ())
           (else (cons (f (car l)) (map f (cdr l)))))))
 
+(define true #t)
+(define false #f)
+
 (define for-each map)
 ;(define compose (lambda (f g) (lambda args (f (apply g args)))))

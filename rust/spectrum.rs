@@ -562,7 +562,7 @@ fn apply_action(list: &Vec<SchemeExpr>,
                             }
                         },
                         _ => Err(format!("cdr only takes lists and quotes (got {})",
-                                         scheme_repr(&args[0]):unwrap()))
+                                         scheme_repr(&args[0]).unwrap()))
                     }
                 },
                 "cons" => {
